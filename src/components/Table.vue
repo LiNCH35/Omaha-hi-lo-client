@@ -31,6 +31,7 @@ import gcd from "../helpers/gcd";
 import shuffle from "../helpers/shuffle";
 import Seat from "./Seat";
 import PokerCard from "./PokerCard";
+import getHandHash from "@/helpers/hand";
 
 export default {
   name: 'Table',
@@ -123,25 +124,27 @@ export default {
     },
 
     calc() {
-      console.log(this.bestCombo(['5s','5s','6d','4s','4s']))
-      return
-      // let res = {}
-      // cardDeck.forEach(c1 => {
-      //   cardDeck.forEach(c2 => {
-      //     console.log({c1, c2})
-      //     cardDeck.forEach(c3 => {
-      //       cardDeck.forEach(c4 => {
-      //         cardDeck.forEach(c5 => {
-      //           const comb = [c1,c2,c3,c4,c5].sort().join('')
-      //           res[comb] = this.bestCombo([c1,c2,c3,c4,c5])
-      //           console.log(res)
-      //           return
-      //         })
-      //       })
-      //     })
-      //   })
-      // })
-      // console.log(res)
+      // console.log(this.bestCombo(['5s','5s','6d','4s','4s']))
+      // return
+      let res = new Set()
+      let i = 0
+      cardDeck.forEach(c1 => {
+        cardDeck.forEach(c2 => {
+          cardDeck.forEach(c3 => {
+            cardDeck.forEach(c4 => {
+              cardDeck.forEach(c5 => {
+                res.add(getHandHash([c1, c2, c3, c4, c5]))
+                i++
+                console.log(res.size, i)
+                // const comb = [c1,c2,c3,c4,c5].sort().join('')
+                // res[comb] = this.bestCombo([c1,c2,c3,c4,c5])
+                // console.log(res)
+                // return
+              })
+            })
+          })
+        })
+      })
     },
 
     bestCombo(cards) {
