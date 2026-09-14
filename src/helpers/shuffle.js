@@ -1,5 +1,7 @@
 export default function shuffle(array) {
-  let currentIndex = array.length,  randomIndex;
+  // Создаем копию массива чтобы не мутировать оригинал
+  const newArray = [...array]
+  let currentIndex = newArray.length,  randomIndex;
 
   // While there remain elements to shuffle...
   while (currentIndex !== 0) {
@@ -9,9 +11,9 @@ export default function shuffle(array) {
     currentIndex--;
 
     // And swap it with the current element.
-    [array[currentIndex], array[randomIndex]] = [
-      array[randomIndex], array[currentIndex]];
+    [newArray[currentIndex], newArray[randomIndex]] = [
+      newArray[randomIndex], newArray[currentIndex]];
   }
 
-  return array;
+  return newArray;
 }

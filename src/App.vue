@@ -1,5 +1,5 @@
 <template>
-  <Table :players="players" @input:players="players = $event" />
+  <Table :players="players" @update:players="players = $event" />
 </template>
 
 <script>
@@ -53,21 +53,27 @@ export default {
 </script>
 
 <style lang="scss">
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
 html {
   height: 100%;
-  background-color: whitesmoke;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
 }
 
 body {
   margin: 0;
   height: 100%;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  
   #app {
-    font-family: Avenir, Helvetica, Arial, sans-serif;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    text-align: center;
-    color: #2c3e50;
     height: 100%;
+    color: #fff;
   }
 }
 </style>
