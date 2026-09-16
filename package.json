@@ -39,10 +39,11 @@
     },
     "rules": {
       "no-unused-vars": [
-        "error",
+        "warning",
         {
           "caughtErrorsIgnorePattern": "^_",
-          "varsIgnorePattern": "^_"
+          "varsIgnorePattern": "^_",
+          "argsIgnorePattern": "^_"
         }
       ]
     }

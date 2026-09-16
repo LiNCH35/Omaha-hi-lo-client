@@ -1,5 +1,5 @@
 <template>
-  <Table :players="players" @update:players="players = $event" />
+  <Table :players="players" @update:players="onPlayersUpdate" @reset-players="resetPlayers" />
 </template>
 
 <script>
@@ -13,40 +13,67 @@ export default {
 
   data() {
     return {
-      players: [
+      players: []
+    }
+  },
+  created() {
+    this.resetPlayers()
+  },
+  methods: {
+    resetPlayers() {
+      this.players = [
         {
           name: 'Player 1',
-          cards: []
+          cards: [],
+          winPercentage: 0,
+          lowWinPercentage: 0
         },
         {
           name: 'Player 2',
-          cards: []
+          cards: [],
+          winPercentage: 0,
+          lowWinPercentage: 0
         },
         {
           name: 'Player 3',
-          cards: []
+          cards: [],
+          winPercentage: 0,
+          lowWinPercentage: 0
         },
         {
           name: 'Player 4',
-          cards: []
+          cards: [],
+          winPercentage: 0,
+          lowWinPercentage: 0
         },
         {
           name: 'Player 5',
-          cards: []
+          cards: [],
+          winPercentage: 0,
+          lowWinPercentage: 0
         },
         {
           name: 'Player 6',
-          cards: []
+          cards: [],
+          winPercentage: 0,
+          lowWinPercentage: 0
         },
         {
           name: 'Player 7',
-          cards: []
+          cards: [],
+          winPercentage: 0,
+          lowWinPercentage: 0
         },
         {
           name: 'Player 8',
-          cards: []
+          cards: [],
+          winPercentage: 0,
+          lowWinPercentage: 0
         },
       ]
+    },
+    onPlayersUpdate(newPlayers) {
+      this.players = newPlayers
     }
   }
 }

@@ -5,34 +5,43 @@
     @mouseenter="onHover"
     @mouseleave="onLeave"
   >
-    <p>{{ player.name }} <span v-if="player.isWinner" class="winner-badge">🏆</span><span v-if="player.isLowWinner" class="low-winner-badge">🥈</span></p>
-    <p>
-      <PokerCard
-        v-for="(card, key) in player.cards"
-        :key="key"
-        :card="card"
-        :show="true"
-        :isInBestHand="isCardInBestHand(card)"
-        :isInLowHand="isCardInLowHand(card)"
-        :isInBothHands="isCardInBothHands(card)"
-      />
-    </p>
-    <div v-if="player.combinations && (player.combinations.hi || player.combinations.lo)" class="combination-tooltip">
-      <div
-        v-if="player.combinations.hi"
-        class="hi-combo"
-        @mouseenter="onHiHover"
-        @mouseleave="onHiLeave"
-      >
-        Hi: {{ player.combinations.hi }}
+    <div class="seat-content">
+      <div class="player-info">
+        <p>{{ player.name }} <span v-if="player.isWinner || player.isLowWinner" class="winner-badge">🏆</span></p>
+        <p v-if="player.startingHandEvaluation !== null && player.startingHandEvaluation !== undefined" class="hand-evaluation">
+          Оценка: {{ player.startingHandEvaluation.toFixed(1) }}
+        </p>
+        <div v-if="player.combinations && (player.combinations.hi || player.combinations.lo)" class="combinations">
+          <div
+            v-if="player.combinations.hi"
+            class="hi-combo"
+            @mouseenter="onHiHover"
+            @mouseleave="onHiLeave"
+          >
+            Hi: {{ player.combinations.hi }} <span v-if="player.winPercentage" class="win-percent">{{ player.winPercentage }}%</span>
+          </div>
+          <div
+            v-if="player.combinations.lo"
+            class="lo-combo"
+            @mouseenter="onLoHover"
+            @mouseleave="onLoLeave"
+          >
+            Lo: {{ player.combinations.lo }} <span v-if="player.lowWinPercentage" class="win-percent">{{ player.lowWinPercentage }}%</span>
+          </div>
+        </div>
       </div>
-      <div
-        v-if="player.combinations.lo"
-        class="lo-combo"
-        @mouseenter="onLoHover"
-        @mouseleave="onLoLeave"
-      >
-        Lo: {{ player.combinations.lo }}
+      <div class="cards-container">
+        <p>
+          <PokerCard
+            v-for="(card, key) in player.cards"
+            :key="key"
+            :card="card"
+            :show="true"
+            :isInBestHand="isCardInBestHand(card)"
+            :isInLowHand="isCardInLowHand(card)"
+            :isInBothHands="isCardInBothHands(card)"
+          />
+        </p>
       </div>
     </div>
   </div>
@@ -74,7 +83,10 @@ export default {
       if (!this.player.bestHand || !Array.isArray(this.player.bestHand)) {
         return false
       }
-      return this.player.bestHand.includes(card)
+      return this.player.bestHand.some(c => 
+        (typeof c === 'object' && c.rank === card.rank && c.suit === card.suit) ||
+        (typeof c === 'string' && c === `${card.rank}${card.suit}`)
+      )
     },
     isCardInLowHand(card) {
       // Показываем карты из low руки при наведении на Lo или если игрок low победитель
@@ -84,7 +96,10 @@ export default {
       if (!this.player.lowHand || !Array.isArray(this.player.lowHand)) {
         return false
       }
-      return this.player.lowHand.includes(card)
+      return this.player.lowHand.some(c => 
+        (typeof c === 'object' && c.rank === card.rank && c.suit === card.suit) ||
+        (typeof c === 'string' && c === `${card.rank}${card.suit}`)
+      )
     },
     isCardInBothHands(card) {
       // Показываем карты, которые входят в обе комбинацию
@@ -135,10 +150,80 @@ export default {
   transition: all 0.3s ease;
   position: relative;
 
+  .seat-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .player-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .cards-container {
+    display: flex;
+    justify-content: center;
+  }
+
   p {
-    margin: 5px 0;
+    margin: 2px 0;
     color: white;
     font-weight: 500;
+  }
+
+  .hand-evaluation {
+    font-size: 12px;
+    color: #4caf50;
+    font-weight: 600;
+    background: rgba(76, 175, 80, 0.2);
+    padding: 2px 6px;
+    border-radius: 4px;
+    display: inline-block;
+  }
+
+  .combinations {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 10px;
+    font-weight: 600;
+    text-align: center;
+
+    .hi-combo {
+      color: #ffd700;
+      cursor: pointer;
+      padding: 2px 4px;
+      border-radius: 4px;
+      transition: background 0.2s ease;
+      background: rgba(255, 215, 0, 0.1);
+
+      &:hover {
+        background: rgba(255, 215, 0, 0.3);
+      }
+    }
+
+    .lo-combo {
+      color: #00bcd4;
+      cursor: pointer;
+      padding: 2px 4px;
+      border-radius: 4px;
+      transition: background 0.2s ease;
+      background: rgba(0, 188, 212, 0.1);
+
+      &:hover {
+        background: rgba(0, 188, 212, 0.3);
+      }
+    }
+
+    .win-percent {
+      font-size: 9px;
+      color: #4caf50;
+      font-weight: 700;
+      margin-left: 4px;
+    }
   }
 
   &.hovered {
@@ -146,12 +231,6 @@ export default {
     border-color: rgba(255, 255, 255, 0.4);
     transform: scale(1.05);
     z-index: 10;
-
-    .combination-tooltip {
-      opacity: 1;
-      background: rgba(0, 0, 0, 1);
-      transform: translateX(-50%) scale(1.1);
-    }
   }
 
   &.winner {
@@ -185,66 +264,9 @@ export default {
   }
 
   .winner-badge {
-    font-size: 1.2em;
-    margin-left: 5px;
+    font-size: 0.9em;
+    margin-left: 3px;
     animation: bounce 1s infinite;
-  }
-
-  .low-winner-badge {
-    font-size: 1.2em;
-    margin-left: 5px;
-    animation: bounce 1s infinite;
-  }
-
-  .combination-tooltip {
-    position: absolute;
-    bottom: -45px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(0, 0, 0, 0.9);
-    color: white;
-    padding: 8px 12px;
-    border-radius: 6px;
-    font-size: 11px;
-    font-weight: 600;
-    white-space: nowrap;
-    z-index: 100;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    opacity: 0.8;
-    transition: all 0.3s ease;
-    min-width: 80px;
-    text-align: center;
-
-    &:hover {
-      opacity: 1;
-      background: rgba(0, 0, 0, 1);
-    }
-
-    .hi-combo {
-      color: #ffd700;
-      margin-bottom: 2px;
-      cursor: pointer;
-      padding: 2px 4px;
-      border-radius: 4px;
-      transition: background 0.2s ease;
-
-      &:hover {
-        background: rgba(255, 215, 0, 0.2);
-      }
-    }
-
-    .lo-combo {
-      color: #9c27b0;
-      cursor: pointer;
-      padding: 2px 4px;
-      border-radius: 4px;
-      transition: background 0.2s ease;
-
-      &:hover {
-        background: rgba(156, 39, 176, 0.2);
-      }
-    }
   }
 }
 
@@ -272,17 +294,6 @@ export default {
   }
   50% {
     transform: translateY(-3px);
-  }
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) translateY(5px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
   }
 }
 </style>

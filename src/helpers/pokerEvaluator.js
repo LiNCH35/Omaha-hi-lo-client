@@ -2,12 +2,24 @@ import { evaluateCardCodes, cardCodes, rankDescription, handRank } from 'phe'
 
 /**
  * Конвертирует внутренний формат карт в формат phe
- * Внутренний формат: "14s" (туз пик), "13h" (король червей)
+ * Новый формат: { rank: "A", suit: "s" }
+ * Старый формат (для обратной совместимости): "14s" (туз пик), "13h" (король червей)
  * Формат phe: "As", "Kh"
  */
 function convertCardToPheFormat(card) {
-  const value = card.substring(0, card.length - 1)
-  const suit = card[card.length - 1]
+  let rank, suit
+  
+  if (typeof card === 'object' && card.rank && card.suit) {
+    // Новый объектный формат { rank: "A", suit: "s" }
+    rank = card.rank
+    suit = card.suit
+  } else if (typeof card === 'string') {
+    // Старый строковый формат для обратной совместимости
+    rank = card.substring(0, card.length - 1)
+    suit = card[card.length - 1]
+  } else {
+    throw new Error('Неверный формат карты')
+  }
   
   // Конвертация значений
   const valueMap = {
@@ -18,9 +30,9 @@ function convertCardToPheFormat(card) {
     '10': 'T'
   }
   
-  const pheValue = valueMap[value] || value
+  const pheValue = valueMap[rank] || rank
   
-  // Конвертация мастей
+  // Конвертация мастей (масти уже в правильном формате)
   const suitMap = {
     's': 's', // spades
     'h': 'h', // hearts  
@@ -160,7 +172,7 @@ function evaluateHoldemHand(playerCards, boardCards, evaluateLow = false) {
 /**
  * Оценивает low комбинацию (8-or-better)
  * Для low нужно 5 карт с номиналом 8 или ниже, без пар
- * @param {Array} hand - 5 карт
+ * @param {Array} hand - 5 карт (объекты { rank: "A", suit: "s" } или строки)
  * @returns {Object|null} информация о low комбинации или null если нет low
  */
 function evaluateLowHand(hand) {
@@ -168,8 +180,21 @@ function evaluateLowHand(hand) {
     return null
   }
 
-  // Извлекаем значения карт (убираем масть)
-  const values = hand.map(card => parseInt(card.substring(0, card.length - 1)))
+  // Конвертируем карты в числовые значения
+  const rankValueMap = {
+    'A': 14, 'K': 13, 'Q': 12, 'J': 11, 'T': 10,
+    '9': 9, '8': 8, '7': 7, '6': 6, '5': 5, '4': 4, '3': 3, '2': 2
+  }
+
+  const values = hand.map(card => {
+    if (typeof card === 'object' && card.rank) {
+      return rankValueMap[card.rank] || 0
+    } else if (typeof card === 'string') {
+      const rank = card.substring(0, card.length - 1)
+      return rankValueMap[rank] || parseInt(rank) || 0
+    }
+    return 0
+  })
 
   // Конвертируем туз (14) в 1 для low оценки
   const lowValues = values.map(v => v === 14 ? 1 : v)

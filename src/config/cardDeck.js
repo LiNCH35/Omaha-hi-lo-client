@@ -1,9 +1,10 @@
-const cardDeckValues = ['2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14']
+const cardDeckValues = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A']
 const cardDeck = []
 // Пики spades, Черви hearts, Крести/Трефы clubs, Бубны diamonds
-// for (const suit of ['&#9824;', '&#9829;', '&#9827;', '&#9830;']) {
-for (const suit of ['s', 'h', 'c', 'd']) {
-  cardDeckValues.forEach(v => cardDeck.push(`${v}${suit}`))
+const suits = ['s', 'h', 'c', 'd']
+
+for (const suit of suits) {
+  cardDeckValues.forEach(rank => cardDeck.push({ rank, suit }))
 }
-// console.log(cardDeck)
+
 export default cardDeck

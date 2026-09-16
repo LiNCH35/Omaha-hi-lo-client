@@ -31,19 +31,40 @@ export default {
   },
   computed: {
     text() {
-      return this.card
-        .replace('10', 'T')
-        .replace('11', 'J')
-        .replace('12', 'Q')
-        .replace('13', 'K')
-        .replace('14', 'A')
-        .replace('s', '&#9824;')
-        .replace('h', '&#9829;')
-        .replace('c', '&#9827;')
-        .replace('d', '&#9830;')
+      if (!this.card || typeof this.card === 'string') {
+        // Для обратной совместимости со старым строковым форматом
+        return this.card
+          ?.replace('10', 'T')
+          .replace('11', 'J')
+          .replace('12', 'Q')
+          .replace('13', 'K')
+          .replace('14', 'A')
+          .replace('s', '&#9824;')
+          .replace('h', '&#9829;')
+          .replace('c', '&#9827;')
+          .replace('d', '&#9830;') || ''
+      }
+      
+      // Новый объектный формат { rank: "A", suit: "s" }
+      const suitSymbols = {
+        's': '&#9824;',
+        'h': '&#9829;',
+        'c': '&#9827;',
+        'd': '&#9830;'
+      }
+      
+      return `${this.card.rank}${suitSymbols[this.card.suit] || ''}`
     },
     color() {
-      return this.card?.includes('h') || this.card?.includes('d') ? 'red' : 'black'
+      if (!this.card) return 'black'
+      
+      if (typeof this.card === 'string') {
+        // Для обратной совместимости со старым строковым форматом
+        return this.card?.includes('h') || this.card?.includes('d') ? 'red' : 'black'
+      }
+      
+      // Новый объектный формат
+      return this.card.suit === 'h' || this.card.suit === 'd' ? 'red' : 'black'
     },
   },
 }

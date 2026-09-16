@@ -1,5 +1,15 @@
 <template>
   <div class="room">
+    <SettingsMenu
+      :cardCount="cardCount"
+      :playerCount="playerCount"
+      :lowRules="lowRules"
+      :maxPlayers="maxPlayers"
+      @update:cardCount="cardCount = $event"
+      @update:playerCount="playerCount = $event"
+      @update:lowRules="lowRules = $event"
+    />
+    
     <div class="table">
       <template v-for="(player, k) in players" :key="player">
         <seat
@@ -34,31 +44,16 @@
       <div class="deck-info">
         Колода: {{ cardDeck.length }} карт
       </div>
+      <div class="game-info">
+        <span class="game-mode">{{ cardCount === 2 ? 'Hold\'em' : cardCount === 4 ? 'Omaha' : `${cardCount} карт` }}</span>
+        <span v-if="lowRules" class="hi-lo-badge">Hi-Lo</span>
+      </div>
     </div>
     <div class="interface">
-      <div class="settings">
-        <label for="cardCount">Карт:</label>
-        <select id="cardCount" v-model.number="cardCount">
-          <option value="2">2 (Hold'em)</option>
-          <option value="4">4 (Omaha)</option>
-          <option value="6">6</option>
-          <option value="7">7</option>
-        </select>
-      </div>
-      <div class="settings">
-        <label for="playerCount">Игроков:</label>
-        <select id="playerCount" v-model.number="playerCount">
-          <option v-for="count in availablePlayerCounts" :key="count" :value="count">
-            {{ count }}
-          </option>
-        </select>
-      </div>
-      <div class="settings">
-        <label for="lowRules">Hi-Lo:</label>
-        <input type="checkbox" id="lowRules" v-model="lowRules" :disabled="cardCount == 2">
-      </div>
-      <button @click="next" style="font-size: 20px">next</button>
-      <button @click="calc" style="font-size: 20px">calc</button>
+      <button v-if="step === ''" @click="start" class="start-button">Новая игра</button>
+      <button v-if="step !== ''" @click="next" :disabled="step === 'end'">next</button>
+      <button v-if="step === 'river'" @click="calc">calc</button>
+      <button v-if="step !== ''" @click="resetGame" class="reset-button">Новая игра</button>
     </div>
     <div class="results" v-if="hasResults">
       <h3>Результаты раздачи</h3>
@@ -78,11 +73,13 @@ import gcd from "../helpers/gcd";
 import shuffle from "../helpers/shuffle";
 import Seat from "./Seat";
 import PokerCard from "./PokerCard";
+import SettingsMenu from "./SettingsMenu";
 import { determineWinner, translateHandDescription } from "@/helpers/pokerEvaluator";
+import { evaluateStartingHand } from "@/helpers/evaluateStartingHand";
 
 export default {
   name: 'Table',
-  components: {PokerCard, Seat},
+  components: {PokerCard, Seat, SettingsMenu},
   props: {
     placeCount: {
       default: 8
@@ -144,11 +141,6 @@ export default {
         setTimeout(() => {
           // Потом сбрасываем всё
           this.resetGame()
-
-          // Ждем завершения реактивности и затем начинаем новую игру
-          this.$nextTick(() => {
-            this.start()
-          })
         }, 100)
       }
     },
@@ -157,25 +149,26 @@ export default {
       if (newVal !== oldVal) {
         // Сначала сбрасываем всё
         this.resetGame()
-
-        // Ждем завершения реактивности и затем начинаем новую игру
-        this.$nextTick(() => {
-          this.start()
-        })
       }
     },
     lowRules(newVal, oldVal) {
       // Если значение действительно изменилось
       if (newVal !== oldVal) {
+        console.log('lowRules changed from', oldVal, 'to', newVal)
         // Сначала сбрасываем всё
         this.resetGame()
-
-        // Ждем завершения реактивности и затем начинаем новую игру
-        this.$nextTick(() => {
-          this.start()
-        })
       }
-    }
+    },
+    mounted() {
+      // Загружаем настройки из localStorage при монтировании
+      this.loadSettings()
+      // Убеждаемся, что lowRules не сбрасывается
+      console.log('Mounted with lowRules:', this.lowRules)
+    },
+  },
+  mounted() {
+    // Загружаем настройки из localStorage при монтировании
+    this.loadSettings()
   },
   methods: {
     getPlayerPosition(index) {
@@ -218,9 +211,6 @@ export default {
 
     next() {
       console.log('next')
-      if (this.step === '') {
-        return this.start()
-      }
       if (this.step === 'preflop') {
         return this.openFlop()
       }
@@ -243,37 +233,8 @@ export default {
       this.showLoCards = false
       // Сбрасываем колоду к исходному состоянию с глубокой копией
       this.cardDeck = [...cardDeck]
-      if (Array.isArray(this.players)) {
-        this.players.forEach(player => {
-          player.cards = []
-          player.combinations = { hi: null, lo: null }
-          player.bestHand = []
-          player.isWinner = false
-          player.isLowWinner = false
-          player.handDescription = null
-          player.handRank = null
-          player.handScore = null
-          player.lowHand = null
-          player.lowDescription = null
-          player.lowScore = null
-        })
-        // Создаем новый массив чтобы гарантированно сбросить реактивность
-        const newPlayers = this.players.map(player => ({
-          ...player,
-          cards: [],
-          combinations: { hi: null, lo: null },
-          bestHand: [],
-          isWinner: false,
-          isLowWinner: false,
-          handDescription: null,
-          handRank: null,
-          handScore: null,
-          lowHand: null,
-          lowDescription: null,
-          lowScore: null
-        }))
-        this.updatePlayers(newPlayers)
-      }
+      // Полный сброс игроков через родительский компонент
+      this.resetAllPlayers()
     },
 
     start() {
@@ -292,9 +253,21 @@ export default {
             player.lowHand = null
             player.lowDescription = null
             player.lowScore = null
+            player.startingHandEvaluation = null
 
             for (let i = 0; i < this.cardCount; i++) {
               player.cards.push(this.cardDeck.pop())
+            }
+
+            // Вычисляем оценку стартовой руки для Omaha (4+ карт)
+            if (this.cardCount >= 4) {
+              try {
+                const handEvaluation = evaluateStartingHand(player.cards)
+                player.startingHandEvaluation = handEvaluation.overall
+              } catch (error) {
+                console.error('Error evaluating starting hand:', error)
+                player.startingHandEvaluation = null
+              }
             }
           } else {
             // Очищаем неактивных игроков
@@ -306,6 +279,7 @@ export default {
             player.lowHand = null
             player.lowDescription = null
             player.lowScore = null
+            player.startingHandEvaluation = null
           }
         })
         this.updatePlayers([...this.players])
@@ -340,6 +314,11 @@ export default {
 
     updatePlayers(value) {
       this.$emit('update:players', value)
+      // Force reactivity update
+      this.$forceUpdate()
+    },
+    resetAllPlayers() {
+      this.$emit('reset-players')
     },
 
     getBoardText() {
@@ -370,7 +349,10 @@ export default {
       if (!this.showHiCards) {
         return false
       }
-      return this.hoveredPlayer.bestHand.includes(card)
+      return this.hoveredPlayer.bestHand.some(c => 
+        (typeof c === 'object' && c.rank === card.rank && c.suit === card.suit) ||
+        (typeof c === 'string' && c === `${card.rank}${card.suit}`)
+      )
     },
 
     isBoardCardInLowHand(card) {
@@ -381,7 +363,10 @@ export default {
       if (!this.showLoCards) {
         return false
       }
-      return this.hoveredPlayer.lowHand.includes(card)
+      return this.hoveredPlayer.lowHand.some(c => 
+        (typeof c === 'object' && c.rank === card.rank && c.suit === card.suit) ||
+        (typeof c === 'string' && c === `${card.rank}${card.suit}`)
+      )
     },
 
     isBoardCardInBothHands(card) {
@@ -420,6 +405,7 @@ export default {
         return
       }
 
+      console.log('Calculating with lowRules:', this.lowRules)
       const result = determineWinner(this.players, this.boardCards, this.lowRules)
 
       if (result.winners.length > 0) {
@@ -452,6 +438,9 @@ export default {
         }
 
         // Сохраняем результаты в данные игроков
+        const hiWinnersCount = result.winners.length
+        const lowWinnersCount = this.lowRules ? result.lowWinners.length : 0
+        
         this.players.forEach(player => {
           if (player.handDescription) {
             player.combinations = {
@@ -464,10 +453,25 @@ export default {
             player.isWinner = result.winners.some(winner => winner.name === player.name)
             // Проверяем, является ли игрок low победителем
             player.isLowWinner = this.lowRules && result.lowWinners.some(winner => winner.name === player.name)
+            
+            // Рассчитываем проценты от банка
+            if (player.isWinner) {
+              player.winPercentage = Math.round((1 / hiWinnersCount) * 100)
+            } else {
+              player.winPercentage = 0
+            }
+            
+            if (player.isLowWinner) {
+              player.lowWinPercentage = Math.round((1 / lowWinnersCount) * 100)
+            } else {
+              player.lowWinPercentage = 0
+            }
           } else {
             player.isWinner = false
             player.bestHand = []
             player.isLowWinner = false
+            player.winPercentage = 0
+            player.lowWinPercentage = 0
           }
         })
 
@@ -479,11 +483,11 @@ export default {
 
     bestCombo(cards) {
       const values = cards.map(c => c[0])
-      const suits = cards.map(c => c[1])
+      const _suits = cards.map(c => c[1])
       const valuesSet = new Set(values)
-      const suitsSet = new Set(suits)
+      const _suitsSet = new Set(_suits)
       let isStreet = valuesSet.size === 5 && values[4] - values[0] === 4
-      let isFlush = suitsSet.size === 1
+      let isFlush = _suitsSet.size === 1
 
       if (isStreet && isFlush) {
         return `street flush, ${values[4]}`
@@ -538,6 +542,25 @@ export default {
       }
 
       return `height card ${cards[4]}`
+    },
+    loadSettings() {
+      const saved = localStorage.getItem('pokerGameSettings')
+      if (saved) {
+        try {
+          const settings = JSON.parse(saved)
+          console.log('Loading settings from localStorage:', settings)
+          if (settings.cardCount) this.cardCount = settings.cardCount
+          if (settings.playerCount) this.playerCount = settings.playerCount
+          if (typeof settings.lowRules === 'boolean') {
+            this.lowRules = settings.lowRules
+            console.log('Set lowRules to:', this.lowRules)
+          }
+        } catch (error) {
+          console.error('Error loading settings:', error)
+        }
+      } else {
+        console.log('No saved settings found')
+      }
     }
   }
 }
@@ -610,6 +633,34 @@ export default {
     border-radius: 4px;
   }
 
+  .game-info {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+
+    .game-mode {
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 14px;
+      font-weight: 600;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 6px 12px;
+      border-radius: 6px;
+    }
+
+    .hi-lo-badge {
+      color: #9c27b0;
+      font-size: 12px;
+      font-weight: 700;
+      background: rgba(156, 39, 176, 0.2);
+      padding: 4px 8px;
+      border-radius: 4px;
+      border: 1px solid rgba(156, 39, 176, 0.4);
+    }
+  }
+
   .interface {
     position: fixed;
     bottom: 30px;
@@ -618,62 +669,6 @@ export default {
     gap: 15px;
     z-index: 1000;
     align-items: center;
-
-    .settings {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      background: rgba(255, 255, 255, 0.1);
-      backdrop-filter: blur(10px);
-      padding: 12px 16px;
-      border-radius: 8px;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-
-      label {
-        color: white;
-        font-weight: 600;
-        font-size: 14px;
-        min-width: 50px;
-      }
-
-      select {
-        background: rgba(255, 255, 255, 0.9);
-        border: none;
-        border-radius: 6px;
-        padding: 8px 12px;
-        font-size: 14px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        min-width: 60px;
-
-        &:hover:not(:disabled) {
-          background: white;
-        }
-
-        &:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-
-        option {
-          background: white;
-          color: #333;
-        }
-      }
-
-      input[type="checkbox"] {
-        width: 20px;
-        height: 20px;
-        cursor: pointer;
-        accent-color: #667eea;
-
-        &:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-      }
-    }
 
     button {
       padding: 12px 24px;
@@ -685,28 +680,44 @@ export default {
       transition: all 0.3s ease;
       box-shadow: 0 4px 6px rgba(0,0,0,0.2);
 
-      &:first-child {
+      &:hover:not(:disabled) {
+        transform: translateY(-2px);
+      }
+
+      &:active:not(:disabled) {
+        transform: translateY(0);
+      }
+
+      &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      &.start-button {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
 
-        &:hover {
-          transform: translateY(-2px);
+        &:hover:not(:disabled) {
           box-shadow: 0 6px 12px rgba(102, 126, 234, 0.4);
         }
       }
 
-      &:last-child {
+      &:not(.start-button):not(.reset-button) {
         background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
         color: white;
 
-        &:hover {
-          transform: translateY(-2px);
+        &:hover:not(:disabled) {
           box-shadow: 0 6px 12px rgba(245, 87, 108, 0.4);
         }
       }
 
-      &:active {
-        transform: translateY(0);
+      &.reset-button {
+        background: linear-gradient(135deg, #4caf50 0%, #8bc34a 100%);
+        color: white;
+
+        &:hover:not(:disabled) {
+          box-shadow: 0 6px 12px rgba(76, 175, 80, 0.4);
+        }
       }
     }
   }
