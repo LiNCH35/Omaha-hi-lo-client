@@ -1,142 +1,117 @@
 <template>
   <div class="settings-menu">
-    <button 
-      class="settings-button" 
+    <button
+      class="settings-button"
       @click="toggleMenu"
       :class="{ 'active': isOpen }"
     >
       ⚙️
     </button>
-    
+
     <div class="settings-panel" :class="{ 'open': isOpen }">
       <div class="settings-header">
         <h3>Настройки игры</h3>
         <button class="close-button" @click="toggleMenu">✕</button>
       </div>
-      
+
       <div class="settings-content">
         <div class="setting-item">
           <label for="cardCount">Карт на руки:</label>
-          <select id="cardCount" v-model.number="localCardCount" @change="saveSettings">
+          <select id="cardCount" v-model.number="cardCountModel">
             <option value="2">2 (Hold'em)</option>
             <option value="4">4 (Omaha)</option>
             <option value="6">6</option>
             <option value="7">7</option>
           </select>
         </div>
-        
+
         <div class="setting-item">
           <label for="playerCount">Количество игроков:</label>
-          <select id="playerCount" v-model.number="localPlayerCount" @change="saveSettings">
+          <select id="playerCount" v-model.number="playerCountModel">
             <option v-for="count in availablePlayerCounts" :key="count" :value="count">
               {{ count }}
             </option>
           </select>
         </div>
-        
+
         <div class="setting-item">
           <label for="lowRules">Hi-Lo правила:</label>
-          <input 
-            type="checkbox" 
-            id="lowRules" 
-            v-model="localLowRules" 
-            @change="saveSettings"
-            :disabled="localCardCount == 2"
+          <input
+            type="checkbox"
+            id="lowRules"
+            v-model="lowRulesModel"
+            :disabled="cardCountModel == 2"
           >
+        </div>
+
+        <div class="setting-item">
+          <label for="simulationMode">Симуляция игры:</label>
+          <input
+            type="checkbox"
+            id="simulationMode"
+            v-model="simulationModeModel"
+          >
+        </div>
+
+        <div class="setting-item">
+          <label for="showCardsAtEnd">Открывать карты в конце раздачи:</label>
+          <input
+            type="checkbox"
+            id="showCardsAtEnd"
+            v-model="showCardsAtEndModel"
+          >
+        </div>
+
+        <div class="setting-actions">
+          <button @click="resetFullGame" class="full-reset-button">Новая игра</button>
         </div>
       </div>
     </div>
   </div>
 </template>
 
-<script>
-export default {
-  name: 'SettingsMenu',
-  props: {
-    cardCount: {
-      type: Number,
-      default: 4
-    },
-    playerCount: {
-      type: Number,
-      default: 8
-    },
-    lowRules: {
-      type: Boolean,
-      default: false
-    },
-    maxPlayers: {
-      type: Number,
-      default: 8
-    }
-  },
-  data() {
-    return {
-      isOpen: false,
-      localCardCount: this.cardCount,
-      localPlayerCount: this.playerCount,
-      localLowRules: this.lowRules
-    }
-  },
-  computed: {
-    availablePlayerCounts() {
-      const counts = []
-      for (let i = 2; i <= this.maxPlayers; i++) {
-        counts.push(i)
-      }
-      return counts
-    }
-  },
-  watch: {
-    cardCount(newVal) {
-      this.localCardCount = newVal
-    },
-    playerCount(newVal) {
-      this.localPlayerCount = newVal
-    },
-    lowRules(newVal) {
-      this.localLowRules = newVal
-    }
-  },
-  mounted() {
-    this.loadSettings()
-  },
-  methods: {
-    toggleMenu() {
-      this.isOpen = !this.isOpen
-    },
-    saveSettings() {
-      const settings = {
-        cardCount: this.localCardCount,
-        playerCount: this.localPlayerCount,
-        lowRules: this.localLowRules
-      }
-      localStorage.setItem('pokerGameSettings', JSON.stringify(settings))
-      
-      this.$emit('update:cardCount', this.localCardCount)
-      this.$emit('update:playerCount', this.localPlayerCount)
-      this.$emit('update:lowRules', this.localLowRules)
-      
-      console.log('Settings saved:', settings)
-    },
-    loadSettings() {
-      const saved = localStorage.getItem('pokerGameSettings')
-      if (saved) {
-        try {
-          const settings = JSON.parse(saved)
-          this.localCardCount = settings.cardCount || 4
-          this.localPlayerCount = settings.playerCount || 8
-          this.localLowRules = settings.lowRules || false
-          
-          this.$emit('update:cardCount', this.localCardCount)
-          this.$emit('update:playerCount', this.localPlayerCount)
-          this.$emit('update:lowRules', this.localLowRules)
-        } catch (error) {
-          console.error('Error loading settings:', error)
-        }
-      }
-    }
-  }
+<script setup>
+import { ref, computed } from 'vue'
+import { storeToRefs } from 'pinia'
+import { useGameStore } from '@/stores/gameStore'
+
+const store = useGameStore()
+const { availablePlayerCounts } = storeToRefs(store)
+
+const isOpen = ref(false)
+
+const cardCountModel = computed({
+  get: () => store.cardCount,
+  set: value => store.applySettings({ cardCount: value }, 'SettingsMenu:cardCount')
+})
+
+const playerCountModel = computed({
+  get: () => store.playerCount,
+  set: value => store.applySettings({ playerCount: value }, 'SettingsMenu:playerCount')
+})
+
+const lowRulesModel = computed({
+  get: () => store.lowRules,
+  set: value => store.applySettings({ lowRules: value }, 'SettingsMenu:lowRules')
+})
+
+const simulationModeModel = computed({
+  get: () => store.simulationMode,
+  set: value => store.applySettings({ simulationMode: value }, 'SettingsMenu:simulationMode')
+})
+
+const showCardsAtEndModel = computed({
+  get: () => store.showCardsAtEnd,
+  set: value => store.applySettings({ showCardsAtEnd: value }, 'SettingsMenu:showCardsAtEnd')
+})
+
+function toggleMenu() {
+  isOpen.value = !isOpen.value
+}
+
+function resetFullGame() {
+  store.resetFullGame()
+  toggleMenu()
 }
 </script>
 
@@ -285,6 +260,35 @@ export default {
     &:disabled {
       opacity: 0.6;
       cursor: not-allowed;
+    }
+  }
+}
+
+.setting-actions {
+  margin-top: 20px;
+  padding-top: 15px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+
+  .full-reset-button {
+    width: 100%;
+    padding: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: linear-gradient(135deg, #f44336 0%, #e53935 100%);
+    color: white;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(244, 67, 54, 0.4);
+    }
+
+    &:active {
+      transform: translateY(0);
     }
   }
 }

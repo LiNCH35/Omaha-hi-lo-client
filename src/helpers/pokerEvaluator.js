@@ -441,6 +441,11 @@ export function determineWinner(players, boardCards, evaluateLow = false) {
   let lowWinners = []
 
   for (const player of players) {
+    // Игроки, которые сделали фолд, не участвуют в определении победителя
+    if (player.hasFolded) {
+      continue
+    }
+    
     if (player.cards.length >= 2) {
       const result = evaluateHand(player.cards, boardCards, evaluateLow)
 

@@ -1,14 +1,30 @@
 <template>
   <div
     class="seat"
-    :class="{ 'winner': player.isWinner, 'low-winner': player.isLowWinner, 'hovered': isHovered }"
+    :class="{ 
+      'winner': player.isWinner, 
+      'low-winner': player.isLowWinner, 
+      'hovered': isHovered, 
+      'folded': player.hasFolded, 
+      'current-player': isCurrentPlayer, 
+      'dealer': isDealer,
+      'active': !player.hasFolded && player.chips > 0
+    }"
     @mouseenter="onHover"
     @mouseleave="onLeave"
   >
+    <div class="seat-indicator">
+      <div v-if="isCurrentPlayer" class="current-turn-indicator"></div>
+      <div v-if="isDealer" class="dealer-indicator">D</div>
+      <div v-if="player.hasFolded" class="folded-indicator">✕</div>
+    </div>
     <div class="seat-content">
       <div class="player-info">
         <p>{{ player.name }} <span v-if="player.isWinner || player.isLowWinner" class="winner-badge">🏆</span></p>
-        <p v-if="player.startingHandEvaluation !== null && player.startingHandEvaluation !== undefined" class="hand-evaluation">
+        <p v-if="player.chips !== undefined" class="chips-info">
+          ${{ player.chips }}
+        </p>
+        <p v-if="!simulationMode && player.startingHandEvaluation !== null && player.startingHandEvaluation !== undefined" class="hand-evaluation">
           Оценка: {{ player.startingHandEvaluation.toFixed(1) }}
         </p>
         <div v-if="player.combinations && (player.combinations.hi || player.combinations.lo)" class="combinations">
@@ -17,6 +33,7 @@
             class="hi-combo"
             @mouseenter="onHiHover"
             @mouseleave="onHiLeave"
+            @click="onHiClick"
           >
             Hi: {{ player.combinations.hi }} <span v-if="player.winPercentage" class="win-percent">{{ player.winPercentage }}%</span>
           </div>
@@ -25,9 +42,14 @@
             class="lo-combo"
             @mouseenter="onLoHover"
             @mouseleave="onLoLeave"
+            @click="onLoClick"
           >
             Lo: {{ player.combinations.lo }} <span v-if="player.lowWinPercentage" class="win-percent">{{ player.lowWinPercentage }}%</span>
           </div>
+        </div>
+        <!-- Отображение выигрыша -->
+        <div v-if="player.winnings && player.winnings > 0" class="winnings-display">
+          +${{ player.winnings }}
         </div>
       </div>
       <div class="cards-container">
@@ -66,12 +88,37 @@ export default {
         }
       }
     },
+    playerIndex: {
+      type: Number,
+      default: 0
+    },
+    simulationMode: {
+      type: Boolean,
+      default: false
+    },
+    isCurrentPlayer: {
+      type: Boolean,
+      default: false
+    },
+    isDealer: {
+      type: Boolean,
+      default: false
+    }
   },
   data() {
     return {
       isHovered: false,
       showHiCards: false,
       showLoCards: false
+    }
+  },
+  computed: {
+    shouldShowCards() {
+      // В режиме симуляции показываем карты только игроку 1 или если showCards = true (конец игры)
+      if (this.simulationMode) {
+        return this.playerIndex === 0 || this.player.showCards
+      }
+      return true
     }
   },
   methods: {
@@ -83,10 +130,16 @@ export default {
       if (!this.player.bestHand || !Array.isArray(this.player.bestHand)) {
         return false
       }
-      return this.player.bestHand.some(c => 
-        (typeof c === 'object' && c.rank === card.rank && c.suit === card.suit) ||
-        (typeof c === 'string' && c === `${card.rank}${card.suit}`)
-      )
+      // Улучшенная проверка карты в лучшей руке
+      return this.player.bestHand.some(c => {
+        if (typeof c === 'object' && c.rank && c.suit) {
+          return c.rank === card.rank && c.suit === card.suit
+        }
+        if (typeof c === 'string') {
+          return c === `${card.rank}${card.suit}` || c === card
+        }
+        return false
+      })
     },
     isCardInLowHand(card) {
       // Показываем карты из low руки при наведении на Lo или если игрок low победитель
@@ -96,10 +149,16 @@ export default {
       if (!this.player.lowHand || !Array.isArray(this.player.lowHand)) {
         return false
       }
-      return this.player.lowHand.some(c => 
-        (typeof c === 'object' && c.rank === card.rank && c.suit === card.suit) ||
-        (typeof c === 'string' && c === `${card.rank}${card.suit}`)
-      )
+      // Улучшенная проверка карты в low руке
+      return this.player.lowHand.some(c => {
+        if (typeof c === 'object' && c.rank && c.suit) {
+          return c.rank === card.rank && c.suit === card.suit
+        }
+        if (typeof c === 'string') {
+          return c === `${card.rank}${card.suit}` || c === card
+        }
+        return false
+      })
     },
     isCardInBothHands(card) {
       // Показываем карты, которые входят в обе комбинацию
@@ -123,6 +182,15 @@ export default {
       this.$emit('player-leave')
       this.$emit('hi-leave')
     },
+    onHiClick() {
+      this.showHiCards = !this.showHiCards
+      this.$emit('player-hover', this.player)
+      if (this.showHiCards) {
+        this.$emit('hi-hover', this.player)
+      } else {
+        this.$emit('hi-leave')
+      }
+    },
     onLoHover() {
       this.showLoCards = true
       this.$emit('player-hover', this.player)
@@ -132,6 +200,15 @@ export default {
       this.showLoCards = false
       this.$emit('player-leave')
       this.$emit('lo-leave')
+    },
+    onLoClick() {
+      this.showLoCards = !this.showLoCards
+      this.$emit('player-hover', this.player)
+      if (this.showLoCards) {
+        this.$emit('lo-hover', this.player)
+      } else {
+        this.$emit('lo-leave')
+      }
     }
   }
 }
@@ -143,35 +220,94 @@ export default {
   box-sizing: border-box;
   white-space: nowrap;
   background: rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
+  border-radius: 50%;
   padding: 10px;
   backdrop-filter: blur(5px);
   border: 1px solid rgba(255, 255, 255, 0.2);
   transition: all 0.3s ease;
   position: relative;
+  width: 70px;
+  height: 70px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  .seat-indicator {
+    position: absolute;
+    top: -12px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 3px;
+  }
+
+  .current-turn-indicator {
+    width: 10px;
+    height: 10px;
+    background: #00bcd4;
+    border-radius: 50%;
+    box-shadow: 0 0 10px rgba(0, 188, 212, 0.8);
+    animation: pulse 1.5s infinite;
+  }
+
+  .dealer-indicator {
+    width: 16px;
+    height: 16px;
+    background: #ff5722;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: bold;
+    box-shadow: 0 0 8px rgba(255, 87, 34, 0.6);
+  }
+
+  .folded-indicator {
+    width: 16px;
+    height: 16px;
+    background: rgba(255, 0, 0, 0.3);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: bold;
+  }
 
   .seat-content {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 4px;
+    width: 100%;
   }
 
   .player-info {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: 2px;
   }
 
   .cards-container {
     display: flex;
     justify-content: center;
+    margin-top: 2px;
+  }
+
+  .mini-card {
+    transform: scale(0.5);
+    margin: -8px -4px;
   }
 
   p {
-    margin: 2px 0;
+    margin: 1px 0;
     color: white;
     font-weight: 500;
+    font-size: 10px;
   }
 
   .hand-evaluation {
@@ -187,8 +323,8 @@ export default {
   .combinations {
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    font-size: 10px;
+    gap: 1px;
+    font-size: 8px;
     font-weight: 600;
     text-align: center;
 
@@ -199,9 +335,14 @@ export default {
       border-radius: 4px;
       transition: background 0.2s ease;
       background: rgba(255, 215, 0, 0.1);
+      user-select: none;
 
       &:hover {
         background: rgba(255, 215, 0, 0.3);
+      }
+
+      &:active {
+        background: rgba(255, 215, 0, 0.5);
       }
     }
 
@@ -212,9 +353,14 @@ export default {
       border-radius: 4px;
       transition: background 0.2s ease;
       background: rgba(0, 188, 212, 0.1);
+      user-select: none;
 
       &:hover {
         background: rgba(0, 188, 212, 0.3);
+      }
+
+      &:active {
+        background: rgba(0, 188, 212, 0.5);
       }
     }
 
@@ -264,9 +410,93 @@ export default {
   }
 
   .winner-badge {
-    font-size: 0.9em;
-    margin-left: 3px;
+    font-size: 0.7em;
+    margin-left: 2px;
     animation: bounce 1s infinite;
+  }
+
+  .chips-info {
+    font-size: 9px;
+    color: #ffd700;
+    font-weight: 600;
+    background: rgba(255, 215, 0, 0.2);
+    padding: 1px 4px;
+    border-radius: 4px;
+    display: inline-block;
+  }
+
+  .current-bet-info {
+    font-size: 9px;
+    color: #4caf50;
+    font-weight: 600;
+    background: rgba(76, 175, 80, 0.2);
+    padding: 1px 4px;
+    border-radius: 4px;
+    display: inline-block;
+  }
+
+  .hand-evaluation {
+    margin-top: 2px;
+    display: flex;
+    justify-content: center;
+    font-size: 8px;
+  }
+
+  .winnings-display {
+    margin-top: 2px;
+    font-size: 9px;
+    color: #4caf50;
+    font-weight: 700;
+    background: rgba(76, 175, 80, 0.2);
+    padding: 1px 4px;
+    border-radius: 4px;
+    display: inline-block;
+    animation: winningsPulse 1s ease-out;
+  }
+
+  @keyframes winningsPulse {
+    0% {
+      transform: scale(0.5);
+      opacity: 0;
+    }
+    50% {
+      transform: scale(1.2);
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  &.folded {
+    opacity: 0.5;
+    border-color: rgba(255, 0, 0, 0.3);
+    background: rgba(255, 0, 0, 0.1);
+  }
+
+  &.current-player {
+    border: 3px solid #00bcd4;
+    box-shadow: 0 0 15px rgba(0, 188, 212, 0.5);
+    animation: pulseCurrent 1.5s infinite;
+  }
+
+  &.dealer {
+    border: 2px solid #ff5722;
+    box-shadow: 0 0 10px rgba(255, 87, 34, 0.3);
+  }
+
+  &.active {
+    border: 2px solid rgba(76, 175, 80, 0.5);
+    box-shadow: 0 0 8px rgba(76, 175, 80, 0.3);
+  }
+}
+
+@keyframes pulseCurrent {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(0, 188, 212, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(0, 188, 212, 0.8);
   }
 }
 

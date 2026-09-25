@@ -1,7 +1,9 @@
 <template>
-  <span class="poker-card" :class="{ 'in-best-hand': isInBestHand, 'in-low-hand': isInLowHand, 'in-both-hands': isInBothHands, 'board-card': isBoardCard }">
+  <span class="poker-card" :class="{ 'in-best-hand': isInBestHand, 'in-low-hand': isInLowHand, 'in-both-hands': isInBothHands, 'board-card': isBoardCard, 'hidden-card': !show }">
     <span v-if="show" v-html="text" :style="{color}" />
-    <span v-else v-html="`&#10720;`" />
+    <span v-else class="card-back">
+      <div class="card-back-pattern"></div>
+    </span>
   </span>
 </template>
 
@@ -83,11 +85,46 @@ export default {
   font-weight: 600;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   min-width: 24px;
+  min-height: 32px;
   text-align: center;
+  position: relative;
+  overflow: hidden;
 
   &:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  }
+
+  &.hidden-card {
+    background: linear-gradient(135deg, #1a237e 0%, #283593 50%, #1a237e 100%);
+    border: 2px solid #fff;
+    padding: 4px 6px;
+  }
+
+  .card-back {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    min-height: 32px;
+  }
+
+  .card-back-pattern {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.1),
+      rgba(255, 255, 255, 0.1) 2px,
+      transparent 2px,
+      transparent 4px
+    );
+    border-radius: 4px;
   }
 
   &.in-best-hand {
