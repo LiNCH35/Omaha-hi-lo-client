@@ -30,19 +30,19 @@
         <div v-if="player.combinations && (player.combinations.hi || player.combinations.lo)" class="combinations">
           <div
             v-if="player.combinations.hi"
-            class="hi-combo"
-            @mouseenter="onHiHover"
-            @mouseleave="onHiLeave"
-            @click="onHiClick"
+            class="combo hi-combo"
+            @mouseenter="onComboEnter('hi')"
+            @mouseleave="onComboLeave('hi')"
+            @click="onComboClick('hi')"
           >
             Hi: {{ player.combinations.hi }} <span v-if="player.winPercentage" class="win-percent">{{ player.winPercentage }}%</span>
           </div>
           <div
             v-if="player.combinations.lo"
-            class="lo-combo"
-            @mouseenter="onLoHover"
-            @mouseleave="onLoLeave"
-            @click="onLoClick"
+            class="combo lo-combo"
+            @mouseenter="onComboEnter('lo')"
+            @mouseleave="onComboLeave('lo')"
+            @click="onComboClick('lo')"
           >
             Lo: {{ player.combinations.lo }} <span v-if="player.lowWinPercentage" class="win-percent">{{ player.lowWinPercentage }}%</span>
           </div>
@@ -58,7 +58,7 @@
             v-for="(card, key) in player.cards"
             :key="key"
             :card="card"
-            :show="true"
+            :show="shouldShowCards"
             :isInBestHand="isCardInBestHand(card)"
             :isInLowHand="isCardInLowHand(card)"
             :isInBothHands="isCardInBothHands(card)"
@@ -72,11 +72,14 @@
 <script>
 
 import PokerCard from "./PokerCard";
+import { isCardInHand } from '@/helpers/cards'
+
 export default {
   name: 'Seat',
   components: {PokerCard},
   props: {
     player: {
+      type: Object,
       default() {
         return {
           name: 'empty',
@@ -108,8 +111,10 @@ export default {
   data() {
     return {
       isHovered: false,
-      showHiCards: false,
-      showLoCards: false
+      shownCombos: {
+        hi: false,
+        lo: false
+      }
     }
   },
   computed: {
@@ -122,46 +127,25 @@ export default {
     }
   },
   methods: {
+    comboHand(type) {
+      return type === 'hi' ? this.player.bestHand : this.player.lowHand
+    },
+    comboWon(type) {
+      return type === 'hi' ? this.player.isWinner : this.player.isLowWinner
+    },
+    isComboCard(card, type) {
+      if (!this.shownCombos[type] && !this.comboWon(type)) {
+        return false
+      }
+      return isCardInHand(card, this.comboHand(type))
+    },
     isCardInBestHand(card) {
-      // Показываем карты из лучшей руки при наведении на Hi или если игрок победитель
-      if (!this.showHiCards && !this.player.isWinner) {
-        return false
-      }
-      if (!this.player.bestHand || !Array.isArray(this.player.bestHand)) {
-        return false
-      }
-      // Улучшенная проверка карты в лучшей руке
-      return this.player.bestHand.some(c => {
-        if (typeof c === 'object' && c.rank && c.suit) {
-          return c.rank === card.rank && c.suit === card.suit
-        }
-        if (typeof c === 'string') {
-          return c === `${card.rank}${card.suit}` || c === card
-        }
-        return false
-      })
+      return this.isComboCard(card, 'hi')
     },
     isCardInLowHand(card) {
-      // Показываем карты из low руки при наведении на Lo или если игрок low победитель
-      if (!this.showLoCards && !this.player.isLowWinner) {
-        return false
-      }
-      if (!this.player.lowHand || !Array.isArray(this.player.lowHand)) {
-        return false
-      }
-      // Улучшенная проверка карты в low руке
-      return this.player.lowHand.some(c => {
-        if (typeof c === 'object' && c.rank && c.suit) {
-          return c.rank === card.rank && c.suit === card.suit
-        }
-        if (typeof c === 'string') {
-          return c === `${card.rank}${card.suit}` || c === card
-        }
-        return false
-      })
+      return this.isComboCard(card, 'lo')
     },
     isCardInBothHands(card) {
-      // Показываем карты, которые входят в обе комбинацию
       return this.isCardInBestHand(card) && this.isCardInLowHand(card)
     },
     onHover() {
@@ -172,42 +156,21 @@ export default {
       this.isHovered = false
       this.$emit('player-leave')
     },
-    onHiHover() {
-      this.showHiCards = true
+    onComboEnter(type) {
+      this.shownCombos[type] = true
       this.$emit('player-hover', this.player)
-      this.$emit('hi-hover', this.player)
+      this.$emit(`${type}-hover`, this.player)
     },
-    onHiLeave() {
-      this.showHiCards = false
+    onComboLeave(type) {
+      this.shownCombos[type] = false
       this.$emit('player-leave')
-      this.$emit('hi-leave')
+      this.$emit(`${type}-leave`)
     },
-    onHiClick() {
-      this.showHiCards = !this.showHiCards
-      this.$emit('player-hover', this.player)
-      if (this.showHiCards) {
-        this.$emit('hi-hover', this.player)
+    onComboClick(type) {
+      if (this.shownCombos[type]) {
+        this.onComboLeave(type)
       } else {
-        this.$emit('hi-leave')
-      }
-    },
-    onLoHover() {
-      this.showLoCards = true
-      this.$emit('player-hover', this.player)
-      this.$emit('lo-hover', this.player)
-    },
-    onLoLeave() {
-      this.showLoCards = false
-      this.$emit('player-leave')
-      this.$emit('lo-leave')
-    },
-    onLoClick() {
-      this.showLoCards = !this.showLoCards
-      this.$emit('player-hover', this.player)
-      if (this.showLoCards) {
-        this.$emit('lo-hover', this.player)
-      } else {
-        this.$emit('lo-leave')
+        this.onComboEnter(type)
       }
     }
   }
@@ -311,13 +274,15 @@ export default {
   }
 
   .hand-evaluation {
-    font-size: 12px;
+    font-size: 8px;
     color: #4caf50;
     font-weight: 600;
     background: rgba(76, 175, 80, 0.2);
     padding: 2px 6px;
     border-radius: 4px;
-    display: inline-block;
+    display: flex;
+    justify-content: center;
+    margin-top: 2px;
   }
 
   .combinations {
@@ -328,40 +293,32 @@ export default {
     font-weight: 600;
     text-align: center;
 
-    .hi-combo {
-      color: #ffd700;
+    .combo {
       cursor: pointer;
       padding: 2px 4px;
       border-radius: 4px;
       transition: background 0.2s ease;
-      background: rgba(255, 215, 0, 0.1);
+      background: rgba(var(--combo-rgb), 0.1);
+      color: var(--combo-color);
       user-select: none;
 
       &:hover {
-        background: rgba(255, 215, 0, 0.3);
+        background: rgba(var(--combo-rgb), 0.3);
       }
 
       &:active {
-        background: rgba(255, 215, 0, 0.5);
+        background: rgba(var(--combo-rgb), 0.5);
       }
     }
 
+    .hi-combo {
+      --combo-rgb: 255, 215, 0;
+      --combo-color: #ffd700;
+    }
+
     .lo-combo {
-      color: #00bcd4;
-      cursor: pointer;
-      padding: 2px 4px;
-      border-radius: 4px;
-      transition: background 0.2s ease;
-      background: rgba(0, 188, 212, 0.1);
-      user-select: none;
-
-      &:hover {
-        background: rgba(0, 188, 212, 0.3);
-      }
-
-      &:active {
-        background: rgba(0, 188, 212, 0.5);
-      }
+      --combo-rgb: 0, 188, 212;
+      --combo-color: #00bcd4;
     }
 
     .win-percent {
@@ -379,34 +336,32 @@ export default {
     z-index: 10;
   }
 
-  &.winner {
-    border: 3px solid #ffd700;
+  &.winner,
+  &.low-winner {
     border-radius: 12px;
     padding: 10px;
-    background: linear-gradient(135deg, rgba(255, 215, 0, 0.3), rgba(255, 152, 0, 0.3));
     box-shadow:
-      0 0 20px rgba(255, 215, 0, 0.6),
-      inset 0 0 10px rgba(255, 215, 0, 0.2);
-    animation: pulse 2s infinite;
+      0 0 20px rgba(var(--glow-rgb), 0.6),
+      inset 0 0 10px rgba(var(--glow-rgb), 0.2);
+    animation: seatGlow 2s infinite;
+  }
+
+  &.winner {
+    --glow-rgb: 255, 215, 0;
+    border: 3px solid #ffd700;
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.3), rgba(255, 152, 0, 0.3));
   }
 
   &.low-winner {
+    --glow-rgb: 156, 39, 176;
     border: 3px solid #9c27b0;
-    border-radius: 12px;
-    padding: 10px;
     background: linear-gradient(135deg, rgba(156, 39, 176, 0.3), rgba(103, 58, 183, 0.3));
-    box-shadow:
-      0 0 20px rgba(156, 39, 176, 0.6),
-      inset 0 0 10px rgba(156, 39, 176, 0.2);
-    animation: pulseLow 2s infinite;
   }
 
   &.winner.low-winner {
+    --glow-rgb: 255, 152, 0;
     border: 3px solid #ff9800;
     background: linear-gradient(135deg, rgba(255, 215, 0, 0.3), rgba(156, 39, 176, 0.3));
-    box-shadow:
-      0 0 20px rgba(255, 152, 0, 0.6),
-      inset 0 0 10px rgba(156, 39, 176, 0.2);
   }
 
   .winner-badge {
@@ -433,13 +388,6 @@ export default {
     padding: 1px 4px;
     border-radius: 4px;
     display: inline-block;
-  }
-
-  .hand-evaluation {
-    margin-top: 2px;
-    display: flex;
-    justify-content: center;
-    font-size: 8px;
   }
 
   .winnings-display {
@@ -475,9 +423,9 @@ export default {
   }
 
   &.current-player {
+    --glow-rgb: 0, 188, 212;
     border: 3px solid #00bcd4;
-    box-shadow: 0 0 15px rgba(0, 188, 212, 0.5);
-    animation: pulseCurrent 1.5s infinite;
+    animation: seatGlow 1.5s infinite;
   }
 
   &.dealer {
@@ -491,30 +439,16 @@ export default {
   }
 }
 
-@keyframes pulseCurrent {
+@keyframes seatGlow {
   0%, 100% {
-    box-shadow: 0 0 15px rgba(0, 188, 212, 0.5);
+    box-shadow:
+      0 0 15px rgba(var(--glow-rgb), 0.5),
+      inset 0 0 10px rgba(var(--glow-rgb), 0.2);
   }
   50% {
-    box-shadow: 0 0 25px rgba(0, 188, 212, 0.8);
-  }
-}
-
-@keyframes pulse {
-  0%, 100% {
-    box-shadow: 0 0 20px rgba(255, 215, 0, 0.6);
-  }
-  50% {
-    box-shadow: 0 0 30px rgba(255, 215, 0, 0.8);
-  }
-}
-
-@keyframes pulseLow {
-  0%, 100% {
-    box-shadow: 0 0 20px rgba(156, 39, 176, 0.6);
-  }
-  50% {
-    box-shadow: 0 0 30px rgba(156, 39, 176, 0.8);
+    box-shadow:
+      0 0 30px rgba(var(--glow-rgb), 0.8),
+      inset 0 0 10px rgba(var(--glow-rgb), 0.2);
   }
 }
 

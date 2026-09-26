@@ -8,7 +8,7 @@
 
 <script setup>
 import { onMounted } from 'vue'
-import { useGameStore } from '@/stores/gameStore'
+import { useGameStore } from '@/stores/game'
 import SettingsMenu from './SettingsMenu'
 import GameBoard from './GameBoard'
 import ActionBar from './ActionBar'

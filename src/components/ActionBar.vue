@@ -19,7 +19,7 @@
             class="raise-input"
             min="20"
             :max="pot"
-            @input="validateRaiseAmount"
+            @input="() => store.validateRaiseAmount()"
           />
           <button @click="playerAction('raise')" class="action-button raise-button">Raise</button>
         </div>
@@ -33,11 +33,11 @@
 <script setup>
 import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useGameStore } from '@/stores/gameStore'
+import { useGameStore } from '@/stores/game'
 
 const store = useGameStore()
 const { step, simulationMode, currentBet, pot } = storeToRefs(store)
-const { newHand, next, calc, playerAction, validateRaiseAmount } = store
+const { newHand, next, calc, playerAction } = store
 
 const raiseAmountModel = computed({
   get: () => store.raiseAmount,

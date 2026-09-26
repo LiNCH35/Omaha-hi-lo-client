@@ -65,7 +65,7 @@
 
 <script setup>
 import { storeToRefs } from 'pinia'
-import { useGameStore } from '@/stores/gameStore'
+import { useGameStore } from '@/stores/game'
 import { getPlayerPosition } from '@/helpers/seatLayout'
 import Seat from './Seat'
 import PokerCard from './PokerCard'

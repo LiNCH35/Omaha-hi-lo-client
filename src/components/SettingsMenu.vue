@@ -73,7 +73,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useGameStore } from '@/stores/gameStore'
+import { useGameStore } from '@/stores/game'
 
 const store = useGameStore()
 const { availablePlayerCounts } = storeToRefs(store)

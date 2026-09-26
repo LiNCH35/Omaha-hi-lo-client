@@ -1,46 +1,16 @@
 import { evaluateCardCodes, cardCodes, rankDescription, handRank } from 'phe'
+import { RANK_VALUES } from '@/helpers/cards'
 
 /**
  * Конвертирует внутренний формат карт в формат phe
- * Новый формат: { rank: "A", suit: "s" }
- * Старый формат (для обратной совместимости): "14s" (туз пик), "13h" (король червей)
+ * Внутренний формат: { rank: "A", suit: "s" }
  * Формат phe: "As", "Kh"
  */
 function convertCardToPheFormat(card) {
-  let rank, suit
-  
-  if (typeof card === 'object' && card.rank && card.suit) {
-    // Новый объектный формат { rank: "A", suit: "s" }
-    rank = card.rank
-    suit = card.suit
-  } else if (typeof card === 'string') {
-    // Старый строковый формат для обратной совместимости
-    rank = card.substring(0, card.length - 1)
-    suit = card[card.length - 1]
-  } else {
+  if (!card || !card.rank || !card.suit) {
     throw new Error('Неверный формат карты')
   }
-  
-  // Конвертация значений
-  const valueMap = {
-    '14': 'A',
-    '13': 'K', 
-    '12': 'Q',
-    '11': 'J',
-    '10': 'T'
-  }
-  
-  const pheValue = valueMap[rank] || rank
-  
-  // Конвертация мастей (масти уже в правильном формате)
-  const suitMap = {
-    's': 's', // spades
-    'h': 'h', // hearts  
-    'c': 'c', // clubs
-    'd': 'd'  // diamonds
-  }
-  
-  return pheValue + suitMap[suit]
+  return card.rank + card.suit
 }
 
 /**
