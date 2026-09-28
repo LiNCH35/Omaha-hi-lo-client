@@ -1,75 +1,113 @@
-const LOG_PREFIX = '[POKER-DEBUG]'
-const LOG_STORAGE_KEY = 'pokerDebugLog'
-const ENABLED_KEY = 'pokerDebugEnabled'
-const MAX_LOG_ENTRIES = 300
+import { useLoggerStore } from '@/stores/logger'
 
-function isDebugEnabled() {
-  try {
-    return localStorage.getItem(ENABLED_KEY) !== 'false'
-  } catch (error) {
-    return false
+let loggerStore = null
+
+function getLoggerStore() {
+  if (!loggerStore) {
+    try {
+      loggerStore = useLoggerStore()
+    } catch (error) {
+      // Store might not be initialized yet
+      console.warn('Logger store not available yet:', error)
+    }
   }
+  return loggerStore
 }
 
 export function debugLog(event, details = {}) {
-  if (!isDebugEnabled()) {
-    return null
+  const logger = getLoggerStore()
+  
+  // Format message for display
+  const message = `${event}${Object.keys(details).length > 0 ? ': ' + JSON.stringify(details) : ''}`
+  
+  // Also log to console for backward compatibility
+  console.log(`[POKER-DEBUG] ${event}`, details)
+  
+  // Add to logger store if available
+  if (logger) {
+    logger.debug(event)
   }
-  const entry = {
-    timestamp: new Date().toISOString(),
-    event,
-    ...details,
-    stack: new Error().stack
-  }
-  try {
-    console.log(`${LOG_PREFIX} ${event}`, details)
-    // console.log(entry.stack)
-  } catch (error) {
-    void error
-  }
-  try {
-    const raw = localStorage.getItem(LOG_STORAGE_KEY)
-    const log = raw ? JSON.parse(raw) : []
-    log.push(entry)
-    while (log.length > MAX_LOG_ENTRIES) {
-      log.shift()
-    }
-    localStorage.setItem(LOG_STORAGE_KEY, JSON.stringify(log))
-  } catch (error) {
-    void error
-  }
-  return entry
+  
+  return { event, details, timestamp: new Date().toISOString() }
 }
 
-export function getDebugLog() {
-  try {
-    return JSON.parse(localStorage.getItem(LOG_STORAGE_KEY) || '[]')
-  } catch (error) {
-    return []
+export function infoLog(message, details = {}) {
+  const logger = getLoggerStore()
+  
+  const formattedMessage = `${message}${Object.keys(details).length > 0 ? ': ' + JSON.stringify(details) : ''}`
+  
+  console.log(`[POKER-INFO] ${message}`, details)
+  
+  if (logger) {
+    logger.info(formattedMessage)
   }
+  
+  return { message, details, timestamp: new Date().toISOString() }
+}
+
+export function successLog(message, details = {}) {
+  const logger = getLoggerStore()
+  
+  const formattedMessage = `${message}${Object.keys(details).length > 0 ? ': ' + JSON.stringify(details) : ''}`
+  
+  console.log(`[POKER-SUCCESS] ${message}`, details)
+  
+  if (logger) {
+    logger.success(formattedMessage)
+  }
+  
+  return { message, details, timestamp: new Date().toISOString() }
+}
+
+export function warningLog(message, details = {}) {
+  const logger = getLoggerStore()
+  
+  const formattedMessage = `${message}${Object.keys(details).length > 0 ? ': ' + JSON.stringify(details) : ''}`
+  
+  console.warn(`[POKER-WARNING] ${message}`, details)
+  
+  if (logger) {
+    logger.warning(formattedMessage)
+  }
+  
+  return { message, details, timestamp: new Date().toISOString() }
+}
+
+export function errorLog(message, details = {}) {
+  const logger = getLoggerStore()
+  
+  const formattedMessage = `${message}${Object.keys(details).length > 0 ? ': ' + JSON.stringify(details) : ''}`
+  
+  console.error(`[POKER-ERROR] ${message}`, details)
+  
+  if (logger) {
+    logger.error(formattedMessage)
+  }
+  
+  return { message, details, timestamp: new Date().toISOString() }
+}
+
+// Export legacy functions for backward compatibility
+export function getDebugLog() {
+  const logger = getLoggerStore()
+  return logger ? logger.messages : []
 }
 
 export function clearDebugLog() {
-  try {
-    localStorage.removeItem(LOG_STORAGE_KEY)
-  } catch (error) {
-    void error
-  }
-}
-
-export function setDebugEnabled(enabled) {
-  try {
-    localStorage.setItem(ENABLED_KEY, String(enabled))
-  } catch (error) {
-    void error
+  const logger = getLoggerStore()
+  if (logger) {
+    logger.clear()
   }
 }
 
 if (typeof window !== 'undefined') {
   window.__pokerDebug = {
     debugLog,
+    infoLog,
+    successLog,
+    warningLog,
+    errorLog,
     getDebugLog,
-    clearDebugLog,
-    setDebugEnabled
+    clearDebugLog
   }
 }

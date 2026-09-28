@@ -1,7 +1,7 @@
 import { SMALL_BLIND, BIG_BLIND, HUMAN_PLAYER_INDEX, getBotDecision, calculatePotDistribution } from '@/helpers/gameLogic'
 import { determineWinner, translateHandDescription } from '@/helpers/pokerEvaluator'
 import { evaluateStartingHand } from '@/helpers/evaluateStartingHand'
-import { debugLog } from '@/helpers/debugLogger'
+import { debugLog, infoLog, successLog, warningLog, errorLog } from '@/helpers/debugLogger'
 
 const BOT_ACTION_DELAY = 300
 const STREET_DELAY = 300
@@ -45,7 +45,7 @@ export class GameEngine {
    * Start a new hand
    */
   startHand() {
-    debugLog('game:start', { before: this.store.snapshot() })
+    debugLog('game:start')
     this.clearPendingTimers('start')
     
     this.store.shuffleDeck()
@@ -98,7 +98,7 @@ export class GameEngine {
    * Start betting round with blinds
    */
   startBettingRound() {
-    debugLog('betting:round-start', { before: this.store.snapshot() })
+    debugLog('betting:round-start')
     
     const players = this.store.getPlayers()
     const playerCount = this.store.getPlayerCount()
@@ -127,7 +127,7 @@ export class GameEngine {
           smallBlindPlayer.hasActed = true
           this.store.addToPot(SMALL_BLIND)
           this.store.incrementPlayersActedCount()
-          console.log(`${smallBlindPlayer.name} ставит малый блайнд $${SMALL_BLIND}`)
+          infoLog(`${smallBlindPlayer.name} ставит малый блайнд $${SMALL_BLIND}`)
         }
       }
       
@@ -145,13 +145,13 @@ export class GameEngine {
           this.store.addToPot(BIG_BLIND)
           this.store.setCurrentBet(BIG_BLIND)
           this.store.incrementPlayersActedCount()
-          console.log(`${bigBlindPlayer.name} ставит большой блайнд $${BIG_BLIND}`)
+          infoLog(`${bigBlindPlayer.name} ставит большой блайнд $${BIG_BLIND}`)
         }
       }
       
       // First player to act - third after dealer
       this.store.setCurrentPlayerIndex((dealerIndex + 3) % playerCount)
-      console.log(`Банк после блайндов: $${this.store.getPot()}`)
+      successLog(`Банк после блайндов: $${this.store.getPot()}`)
     } else {
       // On later streets, first player is next after dealer
       this.store.setCurrentPlayerIndex((dealerIndex + 1) % playerCount)
@@ -184,21 +184,21 @@ export class GameEngine {
         player.hasFolded = true
         player.hasActed = true
         this.store.incrementPlayersActedCount()
-        console.log(`${player.name} фолдит`)
+        infoLog(`${player.name} фолдит`)
         break
       case 'check':
-        console.log(`${player.name} чекает`)
+        infoLog(`${player.name} чекает`)
         if (callAmount === 0) {
           player.hasActed = true
           this.store.incrementPlayersActedCount()
         } else {
-          console.log('Нельзя чекить когда есть ставка')
+          warningLog('Нельзя чекить когда есть ставка')
           return false
         }
         break
       case 'call': {
         if (callAmount < 0) {
-          console.log('Ошибка: отрицательная сумма колла')
+          errorLog('Ошибка: отрицательная сумма колла')
           return false
         }
         if (player.chips >= callAmount) {
@@ -207,9 +207,9 @@ export class GameEngine {
           player.hasActed = true
           this.store.incrementPlayersActedCount()
           this.store.addToPot(callAmount)
-          console.log(`${player.name} коллирует $${callAmount}`)
+          infoLog(`${player.name} коллирует $${callAmount}`)
         } else {
-          console.log('Недостаточно фишек для колла')
+          warningLog('Недостаточно фишек для колла')
           return false
         }
         break
@@ -220,7 +220,7 @@ export class GameEngine {
         const pot = this.store.getPot()
         
         if (totalBet > pot) {
-          console.log('Превышен пот лимит')
+          warningLog('Превышен пот лимит')
           return false
         }
         if (player.chips >= totalBet) {
@@ -235,9 +235,9 @@ export class GameEngine {
           })
           this.store.addToPot(totalBet)
           this.store.setCurrentBet(raiseTotal)
-          console.log(`${player.name} рейзит до $${raiseTotal}`)
+          infoLog(`${player.name} рейзит до $${raiseTotal}`)
         } else {
-          console.log('Недостаточно фишек для рейза')
+          warningLog('Недостаточно фишек для рейза')
           return false
         }
         break
@@ -250,7 +250,7 @@ export class GameEngine {
    * Handle bot action
    */
   botAction() {
-    debugLog('action:bot', { before: this.store.snapshot() })
+    debugLog('action:bot')
     
     if (this.store.getCurrentPlayerIndex() === HUMAN_PLAYER_INDEX) {
       debugLog('action:bot:BLOCKED', { reason: 'Попытка автодействия за Player 1', ...this.store.snapshot() })
@@ -277,7 +277,7 @@ export class GameEngine {
    * Move to next player
    */
   nextPlayer() {
-    debugLog('betting:next-player', { before: this.store.snapshot() })
+    debugLog('betting:next-player')
     
     const players = this.store.getPlayers()
     const playerCount = this.store.getPlayerCount()
@@ -391,7 +391,7 @@ export class GameEngine {
       players[winnerIndex].showCards = true
     }
     
-    console.log(`${winner.name} выигрывает банк $${this.store.getPot()} по фолду`)
+    successLog(`${winner.name} выигрывает банк $${this.store.getPot()} по фолду`)
     debugLog('game:end-by-fold', { winner: winner.name, potWon: this.store.getPot() })
     this.store.setPot(0)
   }
@@ -405,7 +405,7 @@ export class GameEngine {
     const lowRules = this.store.getLowRules()
     
     if (!Array.isArray(players) || boardCards.length < 5) {
-      console.log('Недостаточно карт на столе для определения победителя')
+      warningLog('Недостаточно карт на столе для определения победителя')
       return
     }
     
@@ -413,29 +413,29 @@ export class GameEngine {
     const result = determineWinner(players, boardCards, lowRules)
     
     if (result.winners.length > 0) {
-      console.log('=== РЕЗУЛЬТАТЫ РАЗДАЧИ ===')
+      successLog('=== РЕЗУЛЬТАТЫ РАЗДАЧИ ===')
       if (result.isSplit) {
-        console.log(`Сплит пот! ${result.winners.length} победителей:`)
+        infoLog(`Сплит пот! ${result.winners.length} победителей:`)
       } else {
-        console.log('Победитель:')
+        infoLog('Победитель:')
       }
       
       result.winners.forEach(winner => {
         const translatedDesc = translateHandDescription(winner.handDescription)
-        console.log(`${winner.name}: ${translatedDesc} (score: ${winner.handScore}, rank: ${winner.handRank})`)
-        console.log(`Лучшая комбинация: ${winner.bestHand.join(', ')}`)
+        infoLog(`${winner.name}: ${translatedDesc} (score: ${winner.handScore}, rank: ${winner.handRank})`)
+        infoLog(`Лучшая комбинация: ${winner.bestHand.join(', ')}`)
       })
       
       if (lowRules && result.lowWinners.length > 0) {
-        console.log('=== LOW ПОБЕДИТЕЛИ ===')
+        successLog('=== LOW ПОБЕДИТЕЛИ ===')
         if (result.lowIsSplit) {
-          console.log(`Сплит low пот! ${result.lowWinners.length} победителей:`)
+          infoLog(`Сплит low пот! ${result.lowWinners.length} победителей:`)
         } else {
-          console.log('Low победитель:')
+          infoLog('Low победитель:')
         }
         result.lowWinners.forEach(winner => {
-          console.log(`${winner.name}: ${winner.lowDescription} (score: ${winner.lowScore})`)
-          console.log(`Low комбинация: ${winner.lowHand.join(', ')}`)
+          infoLog(`${winner.name}: ${winner.lowDescription} (score: ${winner.lowScore})`)
+          infoLog(`Low комбинация: ${winner.lowHand.join(', ')}`)
         })
       }
       
@@ -452,7 +452,7 @@ export class GameEngine {
         if (winnerIndex !== -1) {
           players[winnerIndex].chips += distribution.hiSharePerWinner
           players[winnerIndex].winnings = (players[winnerIndex].winnings || 0) + distribution.hiSharePerWinner
-          console.log(`${winner.name} получает $${distribution.hiSharePerWinner} от hi пота`)
+          successLog(`${winner.name} получает $${distribution.hiSharePerWinner} от hi пота`)
         }
       })
       
@@ -463,7 +463,7 @@ export class GameEngine {
           if (winnerIndex !== -1) {
             players[winnerIndex].chips += distribution.lowSharePerWinner
             players[winnerIndex].winnings = (players[winnerIndex].winnings || 0) + distribution.lowSharePerWinner
-            console.log(`${winner.name} получает $${distribution.lowSharePerWinner} от low пота`)
+            successLog(`${winner.name} получает $${distribution.lowSharePerWinner} от low пота`)
           }
         })
       }
@@ -518,7 +518,7 @@ export class GameEngine {
         potDistributed: this.store.getPot()
       })
     } else {
-      console.log('Не удалось определить победителя')
+      errorLog('Не удалось определить победителя')
     }
   }
 }

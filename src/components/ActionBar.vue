@@ -1,6 +1,5 @@
 <template>
   <div class="interface">
-    {{ {step} }}
     <div class="action-buttons">
       <button v-if="step === ''" @click="newHand" class="start-button">Новая раздача</button>
 

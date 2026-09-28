@@ -176,11 +176,11 @@ export const useGameStore = defineStore('game', () => {
     applySettings(settings || {}, { source, reset: false })
     players.value = createDefaultPlayers({ hasPlayer: true, length: playerCount.value })
     initialized.value = true
-    debugLog('settings:load-done', { source, settings, after: snapshot() })
+    debugLog('settings:load-done')
   }
 
   function resetGame(autoStart = false) {
-    debugLog('game:resetGame', { autoStart, before: snapshot() })
+    debugLog('game:resetGame')
     if (gameEngine) {
       gameEngine.clearPendingTimers('resetGame')
     }

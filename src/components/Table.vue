@@ -3,6 +3,7 @@
     <SettingsMenu />
     <GameBoard />
     <ActionBar />
+    <ChatLog />
   </div>
 </template>
 
@@ -12,6 +13,7 @@ import { useGameStore } from '@/stores/game'
 import SettingsMenu from './SettingsMenu'
 import GameBoard from './GameBoard'
 import ActionBar from './ActionBar'
+import ChatLog from './ChatLog'
 
 const store = useGameStore()
 
