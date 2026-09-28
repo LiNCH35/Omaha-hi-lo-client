@@ -1,7 +1,7 @@
 <template>
   <span class="poker-card" :class="{ 'in-best-hand': isInBestHand, 'in-low-hand': isInLowHand, 'in-both-hands': isInBothHands, 'board-card': isBoardCard, 'hidden-card': !show }">
     <span v-if="show" class="card-face" :class="{ red: isRed }">
-      <span class="card-rank">{{ card?.rank }}</span><span class="card-suit">{{ suitSymbol }}</span>
+      <span class="card-rank">{{ displayRank }}</span><span class="card-suit">{{ suitSymbol }}</span>
     </span>
     <span v-else class="card-back">
       <div class="card-back-pattern"></div>
@@ -46,6 +46,10 @@ export default {
     },
     isRed() {
       return isRedSuit(this.card?.suit)
+    },
+    displayRank() {
+      const rank = this.card?.rank
+      return rank === 'T' ? '10' : rank
     }
   }
 }
@@ -55,17 +59,17 @@ export default {
 .poker-card {
   --glow-color: rgba(76, 175, 80, 0.6);
   display: inline-block;
-  margin: 2px;
-  padding: 4px 6px;
-  border-radius: 6px;
+  margin: 3px;
+  padding: 6px 8px;
+  border-radius: 8px;
   transition: all 0.3s ease;
   background: white;
   border: 1px solid #ddd;
-  font-size: 16px;
+  font-size: 20px;
   font-weight: 600;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  min-width: 24px;
-  min-height: 32px;
+  min-width: 32px;
+  min-height: 42px;
   text-align: center;
   position: relative;
   overflow: hidden;

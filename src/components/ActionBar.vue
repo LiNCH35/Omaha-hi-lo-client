@@ -9,8 +9,16 @@
       </template>
 
       <template v-if="simulationMode && step !== '' && step !== 'end'">
-        <button @click="playerAction('fold')" class="action-button fold-button">Fold</button>
-        <button @click="handleCheckCall" class="action-button check-call-button">{{ checkCallText }}</button>
+        <button 
+          @click="playerAction('fold')" 
+          class="action-button fold-button"
+          :disabled="!isPlayerTurn"
+        >Fold</button>
+        <button 
+          @click="handleCheckCall" 
+          class="action-button check-call-button"
+          :disabled="!isPlayerTurn"
+        >{{ checkCallText }}</button>
         <div class="raise-container">
           <input
             type="number"
@@ -18,9 +26,13 @@
             class="raise-input"
             min="20"
             :max="pot"
-            @input="() => store.validateRaiseAmount()"
+            @blur="() => store.validateRaiseAmount()"
           />
-          <button @click="playerAction('raise')" class="action-button raise-button">Raise</button>
+          <button 
+            @click="playerAction('raise')" 
+            class="action-button raise-button"
+            :disabled="!isPlayerTurn"
+          >Raise</button>
         </div>
       </template>
 
@@ -35,7 +47,7 @@ import { storeToRefs } from 'pinia'
 import { useGameStore } from '@/stores/game'
 
 const store = useGameStore()
-const { step, simulationMode, currentBet, pot } = storeToRefs(store)
+const { step, simulationMode, currentBet, pot, currentPlayerIndex } = storeToRefs(store)
 const { newHand, next, calc, playerAction } = store
 
 const raiseAmountModel = computed({
@@ -47,6 +59,10 @@ const raiseAmountModel = computed({
 
 const checkCallText = computed(() => {
   return currentBet.value > 0 ? 'Call' : 'Check'
+})
+
+const isPlayerTurn = computed(() => {
+  return currentPlayerIndex.value === 0
 })
 
 function handleCheckCall() {

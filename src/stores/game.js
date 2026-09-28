@@ -421,9 +421,7 @@ export const useGameStore = defineStore('game', () => {
     nextStreet,
     endGameByFold,
     getBotDecision,
-    validateRaiseAmount: () => {
-      raiseAmount.value = validateRaiseAmount(raiseAmount.value, pot.value)
-    },
+    validateRaiseAmount,
     onPlayerHover,
     onPlayerLeave,
     onHiHover,

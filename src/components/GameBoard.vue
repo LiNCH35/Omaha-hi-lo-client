@@ -41,10 +41,7 @@
         <div class="pot-chip-stack">
           <div class="pot-chip" v-for="i in Math.min(Math.ceil(pot / 50), 8)" :key="i"></div>
         </div>
-        <div class="pot-label">
-          <span class="pot-amount">${{ pot }}</span>
-          <span class="pot-text">Банк</span>
-        </div>
+        <div class="pot-amount">${{ pot }}</div>
       </div>
     </div>
     <!-- Фишки ставок игроков на столе -->
@@ -127,8 +124,8 @@ function getPlayerBetPosition(playerIndex) {
 
 <style lang="scss" scoped>
 .table {
-  width: 1000px;
-  min-height: 600px;
+  width: 800px;
+  min-height: 500px;
   background: radial-gradient(ellipse at center, #2d5a27 0%, #1e3d1a 100%);
   border-radius: 50%;
   border: 12px solid #8b4513;
@@ -145,9 +142,9 @@ function getPlayerBetPosition(playerIndex) {
     position: absolute;
     transform: translate(-50%, -50%);
     font-weight: 600;
-    font-size: 12px;
-    width: 70px;
-    height: 70px;
+    font-size: 14px;
+    width: 90px;
+    height: 90px;
   }
 }
 
@@ -195,13 +192,9 @@ function getPlayerBetPosition(playerIndex) {
 
 .pot-chips {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 15px;
-  background: rgba(0, 0, 0, 0.7);
-  padding: 15px 25px;
-  border-radius: 12px;
-  border: 3px solid rgba(255, 215, 0, 0.5);
-  box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+  gap: 8px;
 }
 
 .pot-chip-stack {
@@ -212,8 +205,8 @@ function getPlayerBetPosition(playerIndex) {
 }
 
 .pot-chip {
-  width: 40px;
-  height: 40px;
+  width: 50px;
+  height: 50px;
   border-radius: 50%;
   background: linear-gradient(135deg, #ffd700 0%, #ff8c00 100%);
   border: 4px dashed #fff;
@@ -225,25 +218,14 @@ function getPlayerBetPosition(playerIndex) {
   margin-top: 0;
 }
 
-.pot-label {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  color: #ffd700;
-}
-
 .pot-amount {
-  font-size: 28px;
+  color: white;
+  font-size: 24px;
   font-weight: 700;
-  line-height: 1;
-}
-
-.pot-text {
-  font-size: 12px;
-  font-weight: 600;
-  margin-top: 2px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  background: rgba(0, 0, 0, 0.5);
+  padding: 4px 12px;
+  border-radius: 6px;
 }
 
 .player-bet-chips {

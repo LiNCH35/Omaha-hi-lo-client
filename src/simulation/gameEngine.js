@@ -215,7 +215,7 @@ export class GameEngine {
         break
       }
       case 'raise': {
-        const raiseTotal = currentBet + raiseAmount
+        const raiseTotal = raiseAmount
         const totalBet = raiseTotal - player.currentBet
         const pot = this.store.getPot()
         
