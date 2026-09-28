@@ -65,27 +65,31 @@ export class GameEngine {
         const currentChips = player.chips
         this.store.resetPlayerState(player, undefined)
         
-        if (currentChips !== undefined) {
+        // Only restore chips if player has chips, otherwise they're out
+        if (currentChips !== undefined && currentChips > 0) {
           player.chips = currentChips
-        } else {
-          player.chips = 1000
-        }
-        
-        for (let i = 0; i < cardCount; i++) {
-          player.cards.push(cardDeck.pop())
-        }
-        
-        if (cardCount >= 4) {
-          try {
-            const handEvaluation = evaluateStartingHand(player.cards)
-            player.startingHandEvaluation = handEvaluation.overall
-          } catch (error) {
-            debugLog('game:start:evaluate-error', { player: player.name, error: String(error) })
-            player.startingHandEvaluation = null
+          
+          for (let i = 0; i < cardCount; i++) {
+            player.cards.push(cardDeck.pop())
           }
+          
+          if (cardCount >= 4) {
+            try {
+              const handEvaluation = evaluateStartingHand(player.cards)
+              player.startingHandEvaluation = handEvaluation.overall
+            } catch (error) {
+              debugLog('game:start:evaluate-error', { player: player.name, error: String(error) })
+              player.startingHandEvaluation = null
+            }
+          }
+        } else {
+          // Player is bankrupt, mark as folded
+          player.chips = 0
+          player.hasFolded = true
         }
       } else {
-        this.store.resetPlayerState(player, 1000)
+        this.store.resetPlayerState(player, 0)
+        player.hasFolded = true
       }
     })
     
@@ -105,6 +109,30 @@ export class GameEngine {
     const step = this.store.getStep()
     const dealerIndex = this.store.getDealerIndex()
     
+    // Check if there are enough active players (not folded)
+    const activePlayers = players.filter(p => !p.hasFolded)
+    if (activePlayers.length < 2) {
+      warningLog('Недостаточно активных игроков для продолжения игры')
+      if (activePlayers.length === 1) {
+        this.endGameByFold(activePlayers[0])
+      } else {
+        // No active players at all - this means everyone is bankrupt
+        // Don't end the game here, let the user decide to start a new game
+        this.store.setStep('end')
+        warningLog('Все игроки обанкротились! Нажмите "Новая игра" для начала новой раздачи.')
+      }
+      return
+    }
+    
+    // Check if all active players are all-in (no chips left)
+    const playersWithChips = activePlayers.filter(p => p.chips > 0)
+    if (playersWithChips.length === 0) {
+      infoLog('Все игроки all-in! Переходим к вскрытию.')
+      // All players are all-in, skip betting and go to next street
+      this.nextStreet()
+      return
+    }
+    
     players.forEach(player => {
       player.currentBet = 0
       player.hasActed = false
@@ -117,10 +145,7 @@ export class GameEngine {
       // Small blind
       const smallBlindIndex = (dealerIndex + 1) % playerCount
       const smallBlindPlayer = players[smallBlindIndex]
-      if (smallBlindPlayer) {
-        if (smallBlindPlayer.chips === undefined) {
-          smallBlindPlayer.chips = 1000
-        }
+      if (smallBlindPlayer && !smallBlindPlayer.hasFolded && smallBlindPlayer.chips > 0) {
         if (smallBlindPlayer.chips >= SMALL_BLIND) {
           smallBlindPlayer.chips -= SMALL_BLIND
           smallBlindPlayer.currentBet = SMALL_BLIND
@@ -128,16 +153,21 @@ export class GameEngine {
           this.store.addToPot(SMALL_BLIND)
           this.store.incrementPlayersActedCount()
           infoLog(`${smallBlindPlayer.name} ставит малый блайнд $${SMALL_BLIND}`)
+        } else {
+          // Player doesn't have enough for small blind, goes all-in
+          smallBlindPlayer.chips = 0
+          smallBlindPlayer.currentBet = smallBlindPlayer.chips
+          smallBlindPlayer.hasActed = true
+          this.store.addToPot(smallBlindPlayer.chips)
+          this.store.incrementPlayersActedCount()
+          infoLog(`${smallBlindPlayer.name} ставит все фишки $${smallBlindPlayer.chips} (all-in)`)
         }
       }
       
       // Big blind
       const bigBlindIndex = (dealerIndex + 2) % playerCount
       const bigBlindPlayer = players[bigBlindIndex]
-      if (bigBlindPlayer) {
-        if (bigBlindPlayer.chips === undefined) {
-          bigBlindPlayer.chips = 1000
-        }
+      if (bigBlindPlayer && !bigBlindPlayer.hasFolded && bigBlindPlayer.chips > 0) {
         if (bigBlindPlayer.chips >= BIG_BLIND) {
           bigBlindPlayer.chips -= BIG_BLIND
           bigBlindPlayer.currentBet = BIG_BLIND
@@ -146,6 +176,16 @@ export class GameEngine {
           this.store.setCurrentBet(BIG_BLIND)
           this.store.incrementPlayersActedCount()
           infoLog(`${bigBlindPlayer.name} ставит большой блайнд $${BIG_BLIND}`)
+        } else {
+          // Player doesn't have enough for big blind, goes all-in
+          const allInAmount = bigBlindPlayer.chips
+          bigBlindPlayer.chips = 0
+          bigBlindPlayer.currentBet = allInAmount
+          bigBlindPlayer.hasActed = true
+          this.store.addToPot(allInAmount)
+          this.store.setCurrentBet(Math.max(this.store.getCurrentBet(), allInAmount))
+          this.store.incrementPlayersActedCount()
+          infoLog(`${bigBlindPlayer.name} ставит все фишки $${allInAmount} (all-in)`)
         }
       }
       
@@ -209,8 +249,14 @@ export class GameEngine {
           this.store.addToPot(callAmount)
           infoLog(`${player.name} коллирует $${callAmount}`)
         } else {
-          warningLog('Недостаточно фишек для колла')
-          return false
+          // Not enough chips, go all-in
+          const allInAmount = player.chips
+          player.chips = 0
+          player.currentBet += allInAmount
+          player.hasActed = true
+          this.store.incrementPlayersActedCount()
+          this.store.addToPot(allInAmount)
+          infoLog(`${player.name} идёт all-in $${allInAmount}`)
         }
         break
       }
@@ -237,8 +283,20 @@ export class GameEngine {
           this.store.setCurrentBet(raiseTotal)
           infoLog(`${player.name} рейзит до $${raiseTotal}`)
         } else {
-          warningLog('Недостаточно фишек для рейза')
-          return false
+          // Not enough chips, go all-in instead
+          const allInAmount = player.chips
+          player.chips = 0
+          player.currentBet += allInAmount
+          player.hasActed = true
+          this.store.incrementPlayersActedCount()
+          players.forEach((p, idx) => {
+            if (idx !== playerIndex && !p.hasFolded && p.currentBet < player.currentBet) {
+              p.hasActed = false
+            }
+          })
+          this.store.addToPot(allInAmount)
+          this.store.setCurrentBet(Math.max(this.store.getCurrentBet(), player.currentBet))
+          infoLog(`${player.name} идёт all-in $${allInAmount} вместо рейза`)
         }
         break
       }
@@ -267,6 +325,13 @@ export class GameEngine {
       return
     }
     
+    // If player has no chips, they're all-in, skip action
+    if (player.chips <= 0) {
+      debugLog('action:bot:skip-all-in', { player: player.name })
+      this.nextPlayer()
+      return
+    }
+    
     const action = getBotDecision(player, this.store.getCurrentBet())
     debugLog('action:bot:decision', { player: player.name, action })
     this.applyAction(currentPlayerIndex, action)
@@ -285,6 +350,14 @@ export class GameEngine {
     
     if (activePlayers.length === 1) {
       this.endGameByFold(activePlayers[0])
+      return
+    }
+    
+    // Check if all active players are all-in
+    const playersWithChips = activePlayers.filter(p => p.chips > 0)
+    if (playersWithChips.length === 0) {
+      infoLog('Все активные игроки all-in! Переходим к следующей улице.')
+      this.nextStreet()
       return
     }
     

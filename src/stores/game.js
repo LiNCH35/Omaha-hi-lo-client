@@ -14,7 +14,7 @@ import {
   isBoardCardInHand,
   isBoardCardInBothHands as isBoardCardInBothHandsHelper,
   resetPlayerState,
-  DEFAULT_CHIPS,
+  DEFAULT_CHIPS as DEFAULT_CHIPS_HELPER,
   HUMAN_PLAYER_INDEX
 } from '@/helpers/gameLogic'
 import { GameEngine } from '@/simulation'
@@ -199,7 +199,7 @@ export const useGameStore = defineStore('game', () => {
     isProcessingAction.value = false
     cardDeck.value = [...cardDeckConfig]
     players.value.forEach((player, index) => {
-      const chips = player.chips !== undefined ? (savedChips[index] || DEFAULT_CHIPS) : undefined
+      const chips = player.chips !== undefined ? (savedChips[index] || DEFAULT_CHIPS_HELPER) : undefined
       resetPlayerState(player, chips)
     })
     if (autoStart) {
@@ -221,11 +221,17 @@ export const useGameStore = defineStore('game', () => {
     debugLog('game:resetFullGame', { before: snapshot() })
     resetGame(false)
     players.value.forEach(player => {
-      player.chips = DEFAULT_CHIPS
+      player.chips = DEFAULT_CHIPS_HELPER
       player.currentBet = 0
       player.hasFolded = false
       player.hasActed = false
+      player.isWinner = false
+      player.isLowWinner = false
+      player.showCards = false
+      player.winnings = 0
     })
+    step.value = ''
+    debugLog('game:resetFullGame:done', { after: snapshot() })
   }
 
   function start() {
@@ -270,6 +276,13 @@ export const useGameStore = defineStore('game', () => {
     }
     if (player.hasActed && player.currentBet === currentBet.value) {
       isProcessingAction.value = false
+      return
+    }
+    // If player has no chips, they're all-in, skip action
+    if (player.chips <= 0) {
+      debugLog('action:player:skip-all-in', { player: player.name })
+      isProcessingAction.value = false
+      nextPlayer()
       return
     }
     initGameEngine()

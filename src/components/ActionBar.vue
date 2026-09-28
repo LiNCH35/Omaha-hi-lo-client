@@ -4,37 +4,45 @@
       <button v-if="step === ''" @click="newHand" class="start-button">Новая раздача</button>
 
       <template v-if="!simulationMode">
-        <button v-if="step !== ''" @click="next" :disabled="step === 'end'">next</button>
-        <button v-if="step === 'river'" @click="calc">calc</button>
+        <template v-if="hasActivePlayers">
+          <button v-if="step !== ''" @click="next" :disabled="step === 'end'">next</button>
+        </template>
+        <button v-else @click="resetFullGame()" class="full-reset-button">Новая игра</button>
       </template>
 
       <template v-if="simulationMode && step !== '' && step !== 'end'">
-        <button 
-          @click="playerAction('fold')" 
-          class="action-button fold-button"
-          :disabled="!isPlayerTurn"
-        >Fold</button>
-        <button 
-          @click="handleCheckCall" 
-          class="action-button check-call-button"
-          :disabled="!isPlayerTurn"
-        >{{ checkCallText }}</button>
-        <div class="raise-container">
-          <input
-            type="number"
-            v-model.number="raiseAmountModel"
-            class="raise-input"
-            min="10"
-            :max="pot"
-            step="10"
-            @blur="() => store.validateRaiseAmount()"
-          />
+        <template v-if="hasActivePlayers && !isPlayerBankrupt">
           <button 
-            @click="playerAction('raise')" 
-            class="action-button raise-button"
+            @click="playerAction('fold')" 
+            class="action-button fold-button"
             :disabled="!isPlayerTurn"
-          >Raise</button>
+          >Fold</button>
+          <button 
+            @click="handleCheckCall" 
+            class="action-button check-call-button"
+            :disabled="!isPlayerTurn"
+          >{{ checkCallText }}</button>
+          <div class="raise-container">
+            <input
+              type="number"
+              v-model.number="raiseAmountModel"
+              class="raise-input"
+              min="10"
+              :max="maxRaise"
+              step="10"
+              @blur="() => store.validateRaiseAmount()"
+            />
+            <button 
+              @click="playerAction('raise')" 
+              class="action-button raise-button"
+              :disabled="!isPlayerTurn"
+            >Raise</button>
+          </div>
+        </template>
+        <div v-else-if="isPlayerAllIn" class="all-in-message">
+          Вы all-in! Ожидание завершения раздачи...
         </div>
+        <button v-else @click="resetFullGame" class="action-button full-reset-button">Новая игра</button>
       </template>
 
       <button v-if="step === 'end'" @click="newHand" class="reset-button">Новая раздача</button>
@@ -48,8 +56,8 @@ import { storeToRefs } from 'pinia'
 import { useGameStore } from '@/stores/game'
 
 const store = useGameStore()
-const { step, simulationMode, currentBet, pot, currentPlayerIndex } = storeToRefs(store)
-const { newHand, next, calc, playerAction } = store
+const { step, simulationMode, currentBet, pot, currentPlayerIndex, players, playerCount } = storeToRefs(store)
+const { newHand, next, playerAction, resetFullGame } = store
 
 const raiseAmountModel = computed({
   get: () => store.raiseAmount,
@@ -64,6 +72,27 @@ const checkCallText = computed(() => {
 
 const isPlayerTurn = computed(() => {
   return currentPlayerIndex.value === 0
+})
+
+const currentPlayerChips = computed(() => {
+  return players.value[0]?.chips || 0
+})
+
+const maxRaise = computed(() => {
+  return Math.min(pot.value, currentPlayerChips.value)
+})
+
+const hasActivePlayers = computed(() => {
+  return players.value.filter((p, i) => i < playerCount.value && p.chips > 0).length > 0
+})
+
+const isPlayerBankrupt = computed(() => {
+  return currentPlayerChips.value <= 0
+})
+
+const isPlayerAllIn = computed(() => {
+  const player = players.value[0]
+  return player && player.chips === 0 && !player.hasFolded
 })
 
 function handleCheckCall() {
@@ -164,6 +193,15 @@ function handleCheckCall() {
       }
     }
 
+    &.full-reset-button {
+      background: linear-gradient(135deg, #f44336 0%, #e53935 100%);
+      color: white;
+
+      &:hover:not(:disabled) {
+        box-shadow: 0 6px 12px rgba(244, 67, 54, 0.4);
+      }
+    }
+
     &.action-button {
       padding: 10px 20px;
       font-size: 14px;
@@ -213,6 +251,26 @@ function handleCheckCall() {
           box-shadow: 0 6px 12px rgba(255, 152, 0, 0.4);
         }
       }
+
+      &.full-reset-button {
+        background: linear-gradient(135deg, #f44336 0%, #e53935 100%);
+        color: white;
+
+        &:hover:not(:disabled) {
+          box-shadow: 0 6px 12px rgba(244, 67, 54, 0.4);
+        }
+      }
+    }
+
+    .all-in-message {
+      background: rgba(255, 152, 0, 0.2);
+      border: 2px solid rgba(255, 152, 0, 0.5);
+      color: #ff9800;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      text-align: center;
     }
   }
 }
