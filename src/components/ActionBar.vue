@@ -24,8 +24,9 @@
             type="number"
             v-model.number="raiseAmountModel"
             class="raise-input"
-            min="20"
+            min="10"
             :max="pot"
+            step="10"
             @blur="() => store.validateRaiseAmount()"
           />
           <button 

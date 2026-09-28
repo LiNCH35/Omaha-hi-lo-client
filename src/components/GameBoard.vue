@@ -37,20 +37,12 @@
       Колода: {{ cardDeck.length }} карт
     </div>
     <div class="pot-display-center">
-      <div class="pot-chips">
-        <div class="pot-chip-stack">
-          <div class="pot-chip" v-for="i in Math.min(Math.ceil(pot / 50), 8)" :key="i"></div>
-        </div>
-        <div class="pot-amount">${{ pot }}</div>
-      </div>
+      <PokerChips :amount="pot" :compact="false" :show-amount="true" />
     </div>
     <!-- Фишки ставок игроков на столе -->
     <template v-for="(player, k) in players" :key="`bet-${player.name}`">
       <div v-if="k < playerCount && player.currentBet > 0" class="player-bet-chips" :style="getPlayerBetPosition(k)">
-        <div class="bet-chip-stack">
-          <div class="bet-chip" v-for="i in Math.min(Math.ceil(player.currentBet / 20), 3)" :key="i"></div>
-        </div>
-        <div class="bet-amount">${{ player.currentBet }}</div>
+        <PokerChips :amount="player.currentBet" :compact="true" :show-amount="true" />
       </div>
     </template>
     <div class="game-info">
@@ -66,6 +58,7 @@ import { useGameStore } from '@/stores/game'
 import { getPlayerPosition } from '@/helpers/seatLayout'
 import Seat from './Seat'
 import PokerCard from './PokerCard'
+import PokerChips from './PokerChips'
 
 const store = useGameStore()
 const {
@@ -190,83 +183,10 @@ function getPlayerBetPosition(playerIndex) {
   z-index: 10;
 }
 
-.pot-chips {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.pot-chip-stack {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: -10px;
-}
-
-.pot-chip {
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #ffd700 0%, #ff8c00 100%);
-  border: 4px dashed #fff;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
-  margin-top: -15px;
-}
-
-.pot-chip:first-child {
-  margin-top: 0;
-}
-
-.pot-amount {
-  color: white;
-  font-size: 24px;
-  font-weight: 700;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-  background: rgba(0, 0, 0, 0.5);
-  padding: 4px 12px;
-  border-radius: 6px;
-}
-
 .player-bet-chips {
   position: absolute;
   transform: translate(-50%, -50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
   z-index: 5;
-}
-
-.bet-chip-stack {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: -6px;
-}
-
-.bet-chip {
-  width: 25px;
-  height: 25px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #ffd700 0%, #ff8c00 100%);
-  border: 2px dashed #fff;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-  margin-top: -10px;
-}
-
-.bet-chip:first-child {
-  margin-top: 0;
-}
-
-.bet-amount {
-  color: white;
-  font-size: 11px;
-  font-weight: 700;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-  background: rgba(0, 0, 0, 0.5);
-  padding: 2px 6px;
-  border-radius: 4px;
 }
 
 .game-info {

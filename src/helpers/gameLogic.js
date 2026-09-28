@@ -45,8 +45,8 @@ export function validateRaiseAmount(raiseAmount, pot) {
   if (validated > pot) {
     validated = pot
   }
-  if (validated < 20) {
-    validated = 20
+  if (validated < 10) {
+    validated = 10
   }
   return validated
 }
