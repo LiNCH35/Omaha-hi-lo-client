@@ -67,8 +67,13 @@ const raiseAmountModel = computed({
   }
 })
 
+const callAmount = computed(() => {
+  const player = players.value[currentPlayerIndex.value]
+  return player ? currentBet.value - player.currentBet : 0
+})
+
 const checkCallText = computed(() => {
-  return currentBet.value > 0 ? 'Call' : 'Check'
+  return callAmount.value > 0 ? 'Call' : 'Check'
 })
 
 const isPlayerTurn = computed(() => {
@@ -80,7 +85,9 @@ const currentPlayerChips = computed(() => {
 })
 
 const maxRaise = computed(() => {
-  return Math.min(pot.value, currentPlayerChips.value)
+  const player = players.value[0]
+  const maxOwn = player ? player.currentBet + player.chips : 0
+  return Math.min(currentBet.value + pot.value, maxOwn)
 })
 
 const hasActivePlayers = computed(() => {
@@ -97,7 +104,7 @@ const isPlayerAllIn = computed(() => {
 })
 
 function handleCheckCall() {
-  if (currentBet.value > 0) {
+  if (callAmount.value > 0) {
     playerAction('call')
   } else {
     playerAction('check')

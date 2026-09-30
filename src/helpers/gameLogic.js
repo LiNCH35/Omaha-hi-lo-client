@@ -38,15 +38,15 @@ export function getBoardText(step) {
 }
 
 /**
- * Validate raise amount against pot and minimum
+ * Validate raise amount against maximum and minimum
  */
-export function validateRaiseAmount(raiseAmount, pot) {
+export function validateRaiseAmount(raiseAmount, max, min = 10) {
   let validated = raiseAmount
-  if (validated > pot) {
-    validated = pot
+  if (validated > max) {
+    validated = max
   }
-  if (validated < 10) {
-    validated = 10
+  if (validated < min) {
+    validated = min
   }
   return validated
 }
@@ -164,29 +164,6 @@ export function isBoardCardInBothHands(card, bestHand, lowHand) {
 }
 
 /**
- * Calculate pot distribution for hi-lo split
- */
-export function calculatePotDistribution(pot, lowRules, hiWinnersCount, lowWinnersCount) {
-  let hiPot = pot
-  let lowPot = 0
-  
-  if (lowRules && lowWinnersCount > 0) {
-    hiPot = Math.floor(pot / 2)
-    lowPot = pot - hiPot
-  }
-  
-  const hiSharePerWinner = hiWinnersCount > 0 ? Math.floor(hiPot / hiWinnersCount) : 0
-  const lowSharePerWinner = lowWinnersCount > 0 ? Math.floor(lowPot / lowWinnersCount) : 0
-  
-  return {
-    hiPot,
-    lowPot,
-    hiSharePerWinner,
-    lowSharePerWinner
-  }
-}
-
-/**
  * Reset player state for new hand
  */
 export function resetPlayerState(player, chips) {
@@ -200,6 +177,7 @@ export function resetPlayerState(player, chips) {
   player.lowScore = null
   player.startingHandEvaluation = null
   player.currentBet = 0
+  player.totalBet = 0
   player.hasFolded = false
   player.hasActed = false
   player.showCards = false

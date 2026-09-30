@@ -11,7 +11,8 @@ export function createDefaultPlayers(settings = {length: 8, hasPlayer: true}) {
       cards: [],
       winPercentage: 0,
       lowWinPercentage: 0,
-      chips: DEFAULT_CHIPS
+      chips: DEFAULT_CHIPS,
+      totalBet: 0
     })
   }
 

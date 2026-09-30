@@ -5,150 +5,169 @@
 export class SidePot {
   constructor(amount, eligiblePlayers) {
     this.amount = amount
-    this.eligiblePlayers = eligiblePlayers // Array of player indices who can win this pot
+    this.eligiblePlayers = eligiblePlayers
   }
 }
 
-/**
- * Calculate side pots when a player goes all-in
- */
-export function calculateSidePots(players, currentBet, allInPlayerIndex, allInAmount) {
-  const sidePots = []
-  const mainPotAmount = allInAmount
-  const sidePotAmount = currentBet - allInAmount
-  
-  // Main pot: all players are eligible
-  const mainPotEligible = players
-    .map((p, i) => i)
-    .filter(i => !players[i].hasFolded)
-  
-  sidePots.push(new SidePot(mainPotAmount, mainPotEligible))
-  
-  // Side pot: only players who can cover the full bet are eligible
-  if (sidePotAmount > 0) {
-    const sidePotEligible = players
-      .map((p, i) => i)
-      .filter(i => !players[i].hasFolded && players[i].chips >= currentBet)
-    
-    if (sidePotEligible.length > 1) {
-      sidePots.push(new SidePot(sidePotAmount, sidePotEligible))
-    }
-  }
-  
-  return sidePots
-}
+export function buildPots(players) {
+  const pots = []
+  const totalInvested = players.reduce((sum, player) => sum + (player.totalBet || 0), 0)
+  const contributions = players.map(player => player.totalBet || 0)
 
-/**
- * Calculate all side pots for the current betting round
- */
-export function calculateAllSidePots(players, currentBet) {
-  const sidePots = []
-  const activePlayers = players.filter(p => !p.hasFolded)
-  
-  if (activePlayers.length < 2) {
-    return sidePots
-  }
-  
-  // If all players have the same bet, no side pots needed
-  const uniqueBets = new Set(activePlayers.map(p => p.currentBet))
-  if (uniqueBets.size === 1) {
-    return sidePots
-  }
-  
-  // Find all unique bet amounts to create side pots
-  const betAmounts = activePlayers
-    .map(p => p.currentBet)
-    .filter((bet, index, self) => self.indexOf(bet) === index)
-    .sort((a, b) => a - b)
-  
-  // Create side pots for each bet level
-  let previousBet = 0
-  for (const bet of betAmounts) {
-    const betDifference = bet - previousBet
-    if (betDifference > 0) {
-      const eligiblePlayers = activePlayers
-        .map((p, i) => players.indexOf(p))
-        .filter(i => players[i].currentBet >= bet)
-      
-      sidePots.push(new SidePot(
-        betDifference * eligiblePlayers.length,
-        eligiblePlayers
-      ))
-    }
-    previousBet = bet
-  }
-  
-  return sidePots
-}
-
-/**
- * Distribute pot among winners considering side pots
- */
-export function distributePotWithSidePots(pot, winners, sidePots, lowWinners = [], lowRules = false, players = []) {
-  const distributions = new Map()
-  
-  // Initialize distributions for all players
-  winners.forEach(winner => {
-    distributions.set(winner.name, 0)
-  })
-  lowWinners.forEach(winner => {
-    if (!distributions.has(winner.name)) {
-      distributions.set(winner.name, 0)
+  let refund = null
+  let maxIndex = -1
+  let maxAmount = 0
+  contributions.forEach((amount, index) => {
+    if (amount > maxAmount) {
+      maxAmount = amount
+      maxIndex = index
     }
   })
-  
-  // If no side pots or all players are all-in, use simple distribution
-  if (sidePots.length === 0) {
-    let hiPot = pot
-    let lowPot = 0
-    
-    if (lowRules && lowWinners.length > 0) {
-      hiPot = Math.floor(pot / 2)
-      lowPot = pot - hiPot
-    }
-    
-    // Distribute hi pot
-    const hiShare = hiPot > 0 ? Math.floor(hiPot / winners.length) : 0
-    winners.forEach(winner => {
-      distributions.set(winner.name, distributions.get(winner.name) + hiShare)
-    })
-    
-    // Distribute low pot
-    if (lowRules && lowWinners.length > 0) {
-      const lowShare = lowPot > 0 ? Math.floor(lowPot / lowWinners.length) : 0
-      lowWinners.forEach(winner => {
-        distributions.set(winner.name, distributions.get(winner.name) + lowShare)
+
+  if (maxIndex !== -1 && maxAmount > 0 && !players[maxIndex].hasFolded) {
+    const isTied = contributions.some((amount, index) => index !== maxIndex && amount === maxAmount)
+    if (!isTied) {
+      let secondMax = 0
+      contributions.forEach((amount, index) => {
+        if (index !== maxIndex && amount > secondMax) {
+          secondMax = amount
+        }
       })
+      if (maxAmount > secondMax) {
+        refund = { playerIndex: maxIndex, amount: maxAmount - secondMax }
+        contributions[maxIndex] = secondMax
+      }
     }
-    
-    return distributions
   }
-  
-  // Distribute each side pot
-  for (const sidePot of sidePots) {
-    const eligibleWinners = winners.filter(w => 
-      sidePot.eligiblePlayers.includes(players.indexOf(w))
+
+  const levels = [...new Set(contributions)].filter(level => level > 0).sort((a, b) => a - b)
+  let previousLevel = 0
+  let pendingDead = 0
+  for (const level of levels) {
+    const amount = contributions.reduce(
+      (sum, contribution) => sum + Math.max(0, Math.min(contribution, level) - previousLevel),
+      0
     )
-    
-    if (eligibleWinners.length === 0) continue
-    
-    const share = Math.floor(sidePot.amount / eligibleWinners.length)
-    eligibleWinners.forEach(winner => {
+    previousLevel = level
+    if (amount <= 0) {
+      continue
+    }
+    const eligiblePlayers = players
+      .map((player, index) => index)
+      .filter(index => !players[index].hasFolded && contributions[index] >= level)
+    if (eligiblePlayers.length === 0) {
+      pendingDead += amount
+      continue
+    }
+    pots.push(new SidePot(amount + pendingDead, eligiblePlayers))
+    pendingDead = 0
+  }
+
+  if (pendingDead > 0 && pots.length > 0) {
+    pots[pots.length - 1].amount += pendingDead
+    pendingDead = 0
+  }
+
+  const potsTotal = pots.reduce((sum, pot) => sum + pot.amount, 0)
+  const mismatch = potsTotal + (refund ? refund.amount : 0) - totalInvested
+
+  return { pots, refund, mismatch }
+}
+
+export function distributePots(pots, players, lowRules = false) {
+  const distributions = new Map()
+  const breakdown = new Map()
+  let undistributed = 0
+
+  const ensureEntry = name => {
+    if (!distributions.has(name)) {
+      distributions.set(name, 0)
+      breakdown.set(name, { hi: 0, low: 0 })
+    }
+  }
+
+  const pickMinBy = (list, getScore) => {
+    let best = Infinity
+    let winners = []
+    for (const player of list) {
+      const score = getScore(player)
+      if (score === null || score === undefined) {
+        continue
+      }
+      if (score < best) {
+        best = score
+        winners = [player]
+      } else if (score === best) {
+        winners.push(player)
+      }
+    }
+    return winners
+  }
+
+  const payShare = (winners, amount, kind) => {
+    if (winners.length === 0 || amount <= 0) {
+      return amount
+    }
+    const base = Math.floor(amount / winners.length)
+    let remainder = amount - base * winners.length
+    for (const winner of winners) {
+      let share = base
+      if (remainder > 0) {
+        share += 1
+        remainder -= 1
+      }
+      ensureEntry(winner.name)
       distributions.set(winner.name, distributions.get(winner.name) + share)
+      breakdown.get(winner.name)[kind] += share
+    }
+    return remainder
+  }
+
+  const potResults = []
+
+  for (const pot of pots) {
+    const eligible = pot.eligiblePlayers.map(index => players[index]).filter(Boolean)
+    if (eligible.length === 0) {
+      undistributed += pot.amount
+      continue
+    }
+
+    const hiWinners = pickMinBy(eligible, player => player.handScore)
+    let lowWinners = []
+    if (lowRules) {
+      lowWinners = pickMinBy(eligible, player => player.lowScore)
+    }
+
+    let hiAmount = pot.amount
+    let lowAmount = 0
+    if (lowRules && lowWinners.length > 0) {
+      lowAmount = Math.floor(pot.amount / 2)
+      hiAmount = pot.amount - lowAmount
+    }
+
+    if (hiWinners.length > 0) {
+      undistributed += payShare(hiWinners, hiAmount, 'hi')
+    } else {
+      undistributed += hiAmount
+    }
+
+    if (lowAmount > 0) {
+      if (lowWinners.length > 0) {
+        undistributed += payShare(lowWinners, lowAmount, 'low')
+      } else {
+        undistributed += lowAmount
+      }
+    }
+
+    potResults.push({
+      amount: pot.amount,
+      hiAmount,
+      lowAmount,
+      hiWinners: hiWinners.map(player => player.name),
+      lowWinners: lowWinners.map(player => player.name),
+      eligible: eligible.map(player => player.name)
     })
   }
-  
-  // Handle low pot if applicable
-  if (lowRules && lowWinners.length > 0) {
-    const lowPotAmount = Math.floor(pot / 2)
-    const hiPotAmount = pot - lowPotAmount
-    
-    // Distribute low pot among low winners
-    const lowShare = Math.floor(lowPotAmount / lowWinners.length)
-    lowWinners.forEach(winner => {
-      distributions.set(winner.name, distributions.get(winner.name) + lowShare)
-    })
-  }
-  
-  return distributions
+
+  return { distributions, breakdown, undistributed, potResults }
 }

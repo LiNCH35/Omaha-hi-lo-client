@@ -214,11 +214,11 @@ export const useGameStore = defineStore('game', () => {
   function newHand() {
     debugLog('game:newHand', { before: snapshot() })
     if (step.value !== '') {
-      // Move dealer button to next active (non-folded) player
+      // Move dealer button to next player (skip only bankrupt players, folded ones return next hand)
       let newDealerIndex = (dealerIndex.value + 1) % playerCount.value
       let iterations = 0
       const maxIterations = playerCount.value
-      while (players.value[newDealerIndex].hasFolded && iterations < maxIterations) {
+      while (players.value[newDealerIndex].chips === 0 && iterations < maxIterations) {
         newDealerIndex = (newDealerIndex + 1) % playerCount.value
         iterations++
       }
@@ -234,6 +234,7 @@ export const useGameStore = defineStore('game', () => {
     players.value.forEach(player => {
       player.chips = DEFAULT_CHIPS
       player.currentBet = 0
+      player.totalBet = 0
       player.hasFolded = false
       player.hasActed = false
       player.isWinner = false
@@ -401,7 +402,10 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function validateRaiseAmount() {
-    raiseAmount.value = validateRaiseAmountHelper(raiseAmount.value, pot.value)
+    const player = players.value[HUMAN_PLAYER_INDEX]
+    const maxOwn = player ? player.currentBet + player.chips : pot.value
+    const maxRaise = Math.min(currentBet.value + pot.value, maxOwn)
+    raiseAmount.value = validateRaiseAmountHelper(raiseAmount.value, maxRaise)
   }
 
   return {

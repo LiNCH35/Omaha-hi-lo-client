@@ -1,8 +1,8 @@
-import { SMALL_BLIND, BIG_BLIND, HUMAN_PLAYER_INDEX, getBotDecision, calculatePotDistribution } from '@/helpers/gameLogic'
+import { SMALL_BLIND, BIG_BLIND, HUMAN_PLAYER_INDEX, getBotDecision } from '@/helpers/gameLogic'
 import { determineWinner, translateHandDescription } from '@/helpers/pokerEvaluator'
 import { evaluateStartingHand } from '@/helpers/evaluateStartingHand'
 import { debugLog, infoLog, successLog, warningLog, errorLog } from '@/helpers/debugLogger'
-import { calculateSidePots, calculateAllSidePots, distributePotWithSidePots } from '@/helpers/sidePots'
+import { buildPots, distributePots } from '@/helpers/sidePots'
 
 const BOT_ACTION_DELAY = 300
 const STREET_DELAY = 300
@@ -140,72 +140,87 @@ export class GameEngine {
     this.store.setPlayersActedCount(0)
     
     if (step === 'preflop') {
+      // Blinds go to the next active players after the dealer (folded/bankrupt are not counted)
+      const findNextActive = startIndex => {
+        for (let offset = 1; offset <= playerCount; offset++) {
+          const index = (startIndex + offset) % playerCount
+          if (!players[index].hasFolded && players[index].chips > 0) {
+            return index
+          }
+        }
+        return -1
+      }
+
+      const smallBlindIndex = findNextActive(dealerIndex)
+      const bigBlindIndex = smallBlindIndex !== -1 ? findNextActive(smallBlindIndex) : -1
+      if (bigBlindIndex === -1) {
+        warningLog('Недостаточно активных игроков для блайндов')
+        return
+      }
+
       // Small blind
-      const smallBlindIndex = (dealerIndex + 1) % playerCount
       const smallBlindPlayer = players[smallBlindIndex]
-      if (smallBlindPlayer && !smallBlindPlayer.hasFolded && smallBlindPlayer.chips > 0) {
-        if (smallBlindPlayer.chips >= SMALL_BLIND) {
-          smallBlindPlayer.chips -= SMALL_BLIND
-          smallBlindPlayer.currentBet = SMALL_BLIND
-          smallBlindPlayer.hasActed = true
-          this.store.addToPot(SMALL_BLIND)
-          this.store.incrementPlayersActedCount()
-          infoLog(`${smallBlindPlayer.name} ставит малый блайнд $${SMALL_BLIND}`)
-        } else {
-          // Player doesn't have enough for small blind, goes all-in
-          smallBlindPlayer.chips = 0
-          smallBlindPlayer.currentBet = smallBlindPlayer.chips
-          smallBlindPlayer.hasActed = true
-          this.store.addToPot(smallBlindPlayer.chips)
-          this.store.incrementPlayersActedCount()
-          infoLog(`${smallBlindPlayer.name} ставит все фишки $${smallBlindPlayer.chips} (all-in)`)
-        }
-      } else if (smallBlindPlayer && smallBlindPlayer.hasFolded) {
-        // Small blind player is folded, skip to next
-        infoLog(`${smallBlindPlayer.name} пропускает малый блайнд (выбыл)`)
+      if (smallBlindPlayer.chips >= SMALL_BLIND) {
+        smallBlindPlayer.chips -= SMALL_BLIND
+        smallBlindPlayer.currentBet = SMALL_BLIND
+        smallBlindPlayer.totalBet += SMALL_BLIND
+        smallBlindPlayer.hasActed = true
+        this.store.addToPot(SMALL_BLIND)
+        this.store.incrementPlayersActedCount()
+        infoLog(`${smallBlindPlayer.name} ставит малый блайнд $${SMALL_BLIND}`)
+      } else {
+        // Player doesn't have enough for small blind, goes all-in
+        const allInAmount = smallBlindPlayer.chips
+        smallBlindPlayer.chips = 0
+        smallBlindPlayer.currentBet = allInAmount
+        smallBlindPlayer.totalBet += allInAmount
+        smallBlindPlayer.hasActed = true
+        this.store.addToPot(allInAmount)
+        this.store.incrementPlayersActedCount()
+        infoLog(`${smallBlindPlayer.name} ставит все фишки $${allInAmount} (all-in)`)
       }
-      
-      // Big blind
-      const bigBlindIndex = (dealerIndex + 2) % playerCount
+
+      // Big blind (hasActed stays false - BB gets the option to check or raise)
       const bigBlindPlayer = players[bigBlindIndex]
-      if (bigBlindPlayer && !bigBlindPlayer.hasFolded && bigBlindPlayer.chips > 0) {
-        if (bigBlindPlayer.chips >= BIG_BLIND) {
-          bigBlindPlayer.chips -= BIG_BLIND
-          bigBlindPlayer.currentBet = BIG_BLIND
-          bigBlindPlayer.hasActed = true
-          this.store.addToPot(BIG_BLIND)
-          this.store.setCurrentBet(BIG_BLIND)
-          this.store.incrementPlayersActedCount()
-          infoLog(`${bigBlindPlayer.name} ставит большой блайнд $${BIG_BLIND}`)
-        } else {
-          // Player doesn't have enough for big blind, goes all-in
-          const allInAmount = bigBlindPlayer.chips
-          bigBlindPlayer.chips = 0
-          bigBlindPlayer.currentBet = allInAmount
-          bigBlindPlayer.hasActed = true
-          this.store.addToPot(allInAmount)
-          this.store.setCurrentBet(Math.max(this.store.getCurrentBet(), allInAmount))
-          this.store.incrementPlayersActedCount()
-          infoLog(`${bigBlindPlayer.name} ставит все фишки $${allInAmount} (all-in)`)
-        }
-      } else if (bigBlindPlayer && bigBlindPlayer.hasFolded) {
-        // Big blind player is folded, skip to next
-        infoLog(`${bigBlindPlayer.name} пропускает большой блайнд (выбыл)`)
+      if (bigBlindPlayer.chips >= BIG_BLIND) {
+        bigBlindPlayer.chips -= BIG_BLIND
+        bigBlindPlayer.currentBet = BIG_BLIND
+        bigBlindPlayer.totalBet += BIG_BLIND
+        this.store.addToPot(BIG_BLIND)
+        this.store.setCurrentBet(BIG_BLIND)
+        this.store.incrementPlayersActedCount()
+        infoLog(`${bigBlindPlayer.name} ставит большой блайнд $${BIG_BLIND}`)
+      } else {
+        // Player doesn't have enough for big blind, goes all-in
+        const allInAmount = bigBlindPlayer.chips
+        bigBlindPlayer.chips = 0
+        bigBlindPlayer.currentBet = allInAmount
+        bigBlindPlayer.totalBet += allInAmount
+        this.store.addToPot(allInAmount)
+        this.store.setCurrentBet(Math.max(this.store.getCurrentBet(), allInAmount))
+        this.store.incrementPlayersActedCount()
+        infoLog(`${bigBlindPlayer.name} ставит все фишки $${allInAmount} (all-in)`)
       }
-      
-      // First player to act - third after dealer, skip folded players
-      let firstToActIndex = (dealerIndex + 3) % playerCount
-      let iterations = 0
-      const maxIterations = playerCount
-      while (players[firstToActIndex].hasFolded && iterations < maxIterations) {
-        firstToActIndex = (firstToActIndex + 1) % playerCount
-        iterations++
-      }
+
+      // First player to act - next active player after the big blind
+      const firstToActIndex = findNextActive(bigBlindIndex)
       this.store.setCurrentPlayerIndex(firstToActIndex)
       successLog(`Банк после блайндов: $${this.store.getPot()}`)
     } else {
-      // On later streets, first player is next after dealer
-      this.store.setCurrentPlayerIndex((dealerIndex + 1) % playerCount)
+      // On later streets, first player is next active after dealer
+      const findNextActive = startIndex => {
+        for (let offset = 1; offset <= playerCount; offset++) {
+          const index = (startIndex + offset) % playerCount
+          if (!players[index].hasFolded && players[index].chips > 0) {
+            return index
+          }
+        }
+        return -1
+      }
+      const firstToActIndex = findNextActive(dealerIndex)
+      if (firstToActIndex !== -1) {
+        this.store.setCurrentPlayerIndex(firstToActIndex)
+      }
     }
     
     debugLog('betting:round-start:done', { after: this.store.snapshot() })
@@ -257,6 +272,7 @@ export class GameEngine {
         if (player.chips >= callAmount) {
           player.chips -= callAmount
           player.currentBet = currentBet
+          player.totalBet += callAmount
           player.hasActed = true
           this.store.incrementPlayersActedCount()
           this.store.addToPot(callAmount)
@@ -266,6 +282,7 @@ export class GameEngine {
           const allInAmount = player.chips
           player.chips = 0
           player.currentBet += allInAmount
+          player.totalBet += allInAmount
           player.hasActed = true
           this.store.incrementPlayersActedCount()
           this.store.addToPot(allInAmount)
@@ -276,17 +293,18 @@ export class GameEngine {
       }
       case 'raise': {
         const raiseTotal = raiseAmount
-        const totalBet = raiseTotal - player.currentBet
+        const additionalBet = raiseTotal - player.currentBet
         const pot = this.store.getPot()
-        
-        // If raise is larger than pot, treat it as a call
-        if (totalBet > pot) {
-          infoLog(`${player.name} хочет рейзить $${raiseTotal}, но это больше банка ($${pot}). Обрабатываем как колл.`)
+
+        // Invalid raise (not above the current bet) or bigger than call + pot - fall back to check or call
+        if (additionalBet <= 0 || additionalBet > callAmount + pot) {
+          infoLog(`${player.name} хочет рейзить до $${raiseTotal}. Обрабатываем как чек или колл.`)
           // Treat as call to currentBet - don't reset hasActed for other players
           const callAmount = currentBet - player.currentBet
           if (callAmount > 0 && player.chips >= callAmount) {
             player.chips -= callAmount
             player.currentBet = currentBet
+            player.totalBet += callAmount
             player.hasActed = true
             this.store.incrementPlayersActedCount()
             this.store.addToPot(callAmount)
@@ -300,6 +318,7 @@ export class GameEngine {
             const allInAmount = player.chips
             player.chips = 0
             player.currentBet += allInAmount
+            player.totalBet += allInAmount
             player.hasActed = true
             this.store.incrementPlayersActedCount()
             this.store.addToPot(allInAmount)
@@ -308,35 +327,41 @@ export class GameEngine {
           }
           return true
         }
-        
+
         // Check if player has enough chips for the raise
-        if (player.chips >= totalBet) {
-          player.chips -= totalBet
+        if (player.chips >= additionalBet) {
+          player.chips -= additionalBet
           player.currentBet = raiseTotal
+          player.totalBet += additionalBet
           player.hasActed = true
           this.store.incrementPlayersActedCount()
           // Reset hasActed for players who haven't matched this raise
           players.forEach((p, idx) => {
-            if (idx !== playerIndex && !p.hasFolded && p.currentBet < raiseTotal) {
+            if (idx !== playerIndex && !p.hasFolded && p.chips > 0 && p.currentBet < raiseTotal) {
               p.hasActed = false
             }
           })
-          this.store.addToPot(totalBet)
+          this.store.addToPot(additionalBet)
           this.store.setCurrentBet(raiseTotal)
           infoLog(`${player.name} рейзит до $${raiseTotal}`)
         } else {
           // Not enough chips, go all-in with whatever they have
           const allInAmount = player.chips
           const actualRaiseTotal = player.currentBet + allInAmount
-          
+
           player.chips = 0
           player.currentBet = actualRaiseTotal
+          player.totalBet += allInAmount
           player.hasActed = true
           this.store.incrementPlayersActedCount()
-          
-          // Don't reset hasActed for all-in - players only need to match the highest bet
-          // This allows them to continue betting if they want
-          
+
+          // All-in raise still demands a response: players with chips must call or fold
+          players.forEach((p, idx) => {
+            if (idx !== playerIndex && !p.hasFolded && p.chips > 0 && p.currentBet < actualRaiseTotal) {
+              p.hasActed = false
+            }
+          })
+
           this.store.addToPot(allInAmount)
           this.store.setCurrentBet(Math.max(this.store.getCurrentBet(), actualRaiseTotal))
           infoLog(`${player.name} идёт all-in $${allInAmount} (всего в банке: $${actualRaiseTotal})`)
@@ -413,7 +438,10 @@ export class GameEngine {
       iterations++
     }
     
-    const allActed = !players.find(p => !p.hasFolded && !p.hasActed)
+    // Round ends only when everyone has acted AND matched the current bet
+    // (players without chips are all-in and exempt)
+    const streetCurrentBet = this.store.getCurrentBet()
+    const allActed = !players.find(p => !p.hasFolded && p.chips > 0 && (!p.hasActed || p.currentBet < streetCurrentBet))
     console.log({allActed, l: this.store.getPlayersActedCount(), a: activePlayers.length, activePlayers})
     
     if (allActed) {
@@ -503,6 +531,7 @@ export class GameEngine {
     
     if (winnerIndex !== -1) {
       players[winnerIndex].chips += this.store.getPot()
+      players[winnerIndex].winnings = (players[winnerIndex].winnings || 0) + this.store.getPot()
       players[winnerIndex].isWinner = true
       players[winnerIndex].showCards = true
     }
@@ -555,46 +584,43 @@ export class GameEngine {
         })
       }
       
-      // Calculate side pots if there are all-in players
-      const activePlayers = players.filter(p => !p.hasFolded)
-      const allInPlayers = activePlayers.filter(p => p.chips === 0 && p.currentBet > 0)
-      
-      let distributions
-      
-      if (allInPlayers.length > 0) {
-        // Use side pot logic
-        const sidePots = calculateAllSidePots(players, this.store.getCurrentBet())
-        distributions = distributePotWithSidePots(
-          this.store.getPot(),
-          result.winners,
-          sidePots,
-          result.lowWinners,
-          lowRules,
-          players
-        )
-        infoLog('Используется логика side pots')
-      } else {
-        // Use simple distribution
-        const distribution = calculatePotDistribution(
-          this.store.getPot(),
-          lowRules,
-          result.winners.length,
-          lowRules ? result.lowWinners.length : 0
-        )
-        
-        distributions = new Map()
-        result.winners.forEach(winner => {
-          distributions.set(winner.name, distribution.hiSharePerWinner)
-        })
-        
-        if (lowRules && result.lowWinners.length > 0) {
-          result.lowWinners.forEach(winner => {
-            const current = distributions.get(winner.name) || 0
-            distributions.set(winner.name, current + distribution.lowSharePerWinner)
-          })
+      // Build pots from total contributions (handles side pots and uncalled bets)
+      const potTotal = this.store.getPot()
+      const invested = players.reduce((sum, player) => sum + (player.totalBet || 0), 0)
+      if (invested !== potTotal) {
+        warningLog(`Банк $${potTotal} не совпадает с суммой ставок игроков $${invested}`)
+      }
+
+      const { pots, refund, mismatch } = buildPots(players)
+      if (mismatch !== 0) {
+        warningLog(`Расхождение при формировании потов: $${mismatch}`)
+      }
+
+      if (refund && refund.amount > 0) {
+        const refundPlayer = players[refund.playerIndex]
+        if (refundPlayer) {
+          refundPlayer.chips += refund.amount
+          successLog(`${refundPlayer.name} получает возврат незаершённой ставки $${refund.amount}`)
         }
       }
-      
+
+      const { distributions, breakdown, undistributed, potResults } = distributePots(pots, players, lowRules)
+      if (undistributed > 0) {
+        warningLog(`Не распределено $${undistributed}`)
+      }
+
+      if (potResults.length > 1) {
+        infoLog(`Сформировано ${potResults.length} потов`)
+      }
+      potResults.forEach((pot, index) => {
+        const potName = potResults.length > 1 ? `Пот ${index + 1}` : 'Пот'
+        let summary = `${potName} ($${pot.amount}): хи $${pot.hiAmount} → ${pot.hiWinners.join(', ')}`
+        if (pot.lowAmount > 0) {
+          summary += `; ло $${pot.lowAmount} → ${pot.lowWinners.join(', ')}`
+        }
+        infoLog(summary)
+      })
+
       // Distribute winnings
       distributions.forEach((amount, playerName) => {
         const winnerIndex = players.findIndex(p => p.name === playerName)
@@ -604,19 +630,22 @@ export class GameEngine {
           successLog(`${playerName} получает $${amount}`)
         }
       })
-      
+
       // Update player states
-      const hiPotShare = (lowRules && result.lowWinners.length > 0) ? 50 : 100
-      const lowPotShare = result.winners.length > 0 ? 50 : 100
-      
+      let totalHiPaid = 0
+      let totalLowPaid = 0
+      breakdown.forEach(share => {
+        totalHiPaid += share.hi
+        totalLowPaid += share.low
+      })
+
       players.forEach(player => {
         player.combinations = { hi: null, lo: null }
-        player.bestHand = []
         player.isWinner = false
         player.isLowWinner = false
         player.winPercentage = 0
         player.lowWinPercentage = 0
-        
+
         if (player.handDescription) {
           player.combinations = {
             hi: translateHandDescription(player.handDescription),
@@ -625,8 +654,14 @@ export class GameEngine {
           player.bestHand = player.bestHand || []
           player.isWinner = result.winners.some(winner => winner.name === player.name)
           player.isLowWinner = lowRules && result.lowWinners.some(winner => winner.name === player.name)
-          player.winPercentage = player.isWinner ? Math.round(hiPotShare / result.winners.length) : 0
-          player.lowWinPercentage = player.isLowWinner ? Math.round(lowPotShare / result.lowWinners.length) : 0
+
+          const shares = breakdown.get(player.name) || { hi: 0, low: 0 }
+          if (totalHiPaid > 0) {
+            player.winPercentage = Math.round((shares.hi / totalHiPaid) * 100)
+          }
+          if (totalLowPaid > 0) {
+            player.lowWinPercentage = Math.round((shares.low / totalLowPaid) * 100)
+          }
         }
       })
       

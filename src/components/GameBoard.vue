@@ -36,19 +36,19 @@
     <div class="deck-info">
       Колода: {{ cardDeck.length }} карт
     </div>
-    <div class="pot-display-center">
+    <div v-if="step !== 'end'" class="pot-display-center">
       <PokerChips :amount="pot" :compact="false" :show-amount="true" />
     </div>
     <!-- Фишки ставок игроков на столе -->
     <template v-for="(player, k) in players" :key="`bet-${player.name}`">
-      <div v-if="k < playerCount && player.currentBet > 0" class="player-bet-chips" :style="getPlayerBetPosition(k)">
+      <div v-if="k < playerCount && step !== 'end' && player.currentBet > 0" class="player-bet-chips" :style="getPlayerBetPosition(k)">
         <PokerChips :amount="player.currentBet" :compact="true" :show-amount="true" />
       </div>
     </template>
-    
-    <!-- Выигрыши игроков -->
+
+    <!-- Выигрыши игроков отображаются как ставки -->
     <template v-for="(player, k) in players" :key="`win-${player.name}`">
-      <div v-if="k < playerCount && player.winnings > 0" class="player-winnings" :style="getPlayerWinningsPosition(k)">
+      <div v-if="k < playerCount && step === 'end' && player.winnings > 0" class="player-bet-chips winnings" :style="getPlayerBetPosition(k)">
         <PokerChips :amount="player.winnings" :compact="true" :show-amount="true" />
       </div>
     </template>
@@ -79,7 +79,8 @@ const {
   pot,
   cardCount,
   lowRules,
-  dealerIndex
+  dealerIndex,
+  step
 } = storeToRefs(store)
 const {
   onPlayerHover,
@@ -102,42 +103,22 @@ function getPlayerBetPosition(playerIndex) {
   // Вычисляем позицию для фишек на столе - между местом игрока и центром стола
   const seatLeft = parseFloat(seatPos.left)
   const seatTop = parseFloat(seatPos.top)
-  
+
   // Вектор от центра к месту игрока
   const dx = seatLeft - 50
   const dy = seatTop - 50
-  
+
   // Длина вектора
   const distance = Math.sqrt(dx * dx + dy * dy)
-  
+
   // Нормализуем и сдвигаем ближе к центру (на 70% расстояния)
   const factor = 0.7
   const betLeft = 50 + dx * factor
   const betTop = 50 + dy * factor
-  
+
   return {
     left: `${betLeft}%`,
     top: `${betTop}%`
-  }
-}
-
-function getPlayerWinningsPosition(playerIndex) {
-  const seatPos = getPlayerPosition(playerIndex, playerCount.value)
-  const seatLeft = parseFloat(seatPos.left)
-  const seatTop = parseFloat(seatPos.top)
-  
-  // Вектор от центра к месту игрока
-  const dx = seatLeft - 50
-  const dy = seatTop - 50
-  
-  // Для выигрышей сдвигаем ближе к игроку (на 40% расстояния от центра)
-  const factor = 0.4
-  const winLeft = 50 + dx * factor
-  const winTop = 50 + dy * factor
-  
-  return {
-    left: `${winLeft}%`,
-    top: `${winTop}%`
   }
 }
 </script>
@@ -214,13 +195,11 @@ function getPlayerWinningsPosition(playerIndex) {
   position: absolute;
   transform: translate(-50%, -50%);
   z-index: 5;
-}
 
-.player-winnings {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  z-index: 6;
-  animation: winningsPulse 0.5s ease-out;
+  &.winnings {
+    z-index: 6;
+    animation: winningsPulse 0.5s ease-out;
+  }
 }
 
 @keyframes winningsPulse {
