@@ -1,5 +1,6 @@
 const COMPUTER_NAME = 'Computer'
 const PLAYER_NAME = 'Player'
+const DEFAULT_CHIPS = 1000
 
 export function createDefaultPlayers(settings = {length: 8, hasPlayer: true}) {
   const result = []
@@ -9,7 +10,8 @@ export function createDefaultPlayers(settings = {length: 8, hasPlayer: true}) {
       name: `${COMPUTER_NAME} ${i + 1}`,
       cards: [],
       winPercentage: 0,
-      lowWinPercentage: 0
+      lowWinPercentage: 0,
+      chips: DEFAULT_CHIPS
     })
   }
 

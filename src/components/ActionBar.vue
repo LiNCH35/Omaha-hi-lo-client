@@ -41,6 +41,7 @@
         </template>
         <div v-else-if="isPlayerAllIn" class="all-in-message">
           Вы all-in! Ожидание завершения раздачи...
+          <button v-if="step !== ''" @click="next" :disabled="step === 'end'">next</button>
         </div>
         <button v-else @click="resetFullGame" class="action-button full-reset-button">Новая игра</button>
       </template>

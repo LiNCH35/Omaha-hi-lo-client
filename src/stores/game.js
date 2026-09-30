@@ -14,7 +14,7 @@ import {
   isBoardCardInHand,
   isBoardCardInBothHands as isBoardCardInBothHandsHelper,
   resetPlayerState,
-  DEFAULT_CHIPS as DEFAULT_CHIPS_HELPER,
+  DEFAULT_CHIPS,
   HUMAN_PLAYER_INDEX
 } from '@/helpers/gameLogic'
 import { GameEngine } from '@/simulation'
@@ -199,7 +199,9 @@ export const useGameStore = defineStore('game', () => {
     isProcessingAction.value = false
     cardDeck.value = [...cardDeckConfig]
     players.value.forEach((player, index) => {
-      const chips = player.chips !== undefined ? (savedChips[index] || DEFAULT_CHIPS_HELPER) : undefined
+      // Keep player's current chips (including 0 for bankrupt players)
+      // Only give default chips if chips is undefined (initial state)
+      const chips = savedChips[index] !== undefined ? savedChips[index] : DEFAULT_CHIPS
       resetPlayerState(player, chips)
     })
     if (autoStart) {
@@ -212,7 +214,16 @@ export const useGameStore = defineStore('game', () => {
   function newHand() {
     debugLog('game:newHand', { before: snapshot() })
     if (step.value !== '') {
-      dealerIndex.value = (dealerIndex.value + 1) % playerCount.value
+      // Move dealer button to next active (non-folded) player
+      let newDealerIndex = (dealerIndex.value + 1) % playerCount.value
+      let iterations = 0
+      const maxIterations = playerCount.value
+      while (players.value[newDealerIndex].hasFolded && iterations < maxIterations) {
+        newDealerIndex = (newDealerIndex + 1) % playerCount.value
+        iterations++
+      }
+      dealerIndex.value = newDealerIndex
+      debugLog('game:newHand:dealer-moved', { from: dealerIndex.value, to: newDealerIndex })
     }
     resetGame(true)
   }
@@ -221,7 +232,7 @@ export const useGameStore = defineStore('game', () => {
     debugLog('game:resetFullGame', { before: snapshot() })
     resetGame(false)
     players.value.forEach(player => {
-      player.chips = DEFAULT_CHIPS_HELPER
+      player.chips = DEFAULT_CHIPS
       player.currentBet = 0
       player.hasFolded = false
       player.hasActed = false

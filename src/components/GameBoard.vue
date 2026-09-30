@@ -45,6 +45,13 @@
         <PokerChips :amount="player.currentBet" :compact="true" :show-amount="true" />
       </div>
     </template>
+    
+    <!-- Выигрыши игроков -->
+    <template v-for="(player, k) in players" :key="`win-${player.name}`">
+      <div v-if="k < playerCount && player.winnings > 0" class="player-winnings" :style="getPlayerWinningsPosition(k)">
+        <PokerChips :amount="player.winnings" :compact="true" :show-amount="true" />
+      </div>
+    </template>
     <div class="game-info">
       <span class="game-mode">{{ cardCount === 2 ? 'Hold\'em' : cardCount === 4 ? 'Omaha' : `${cardCount} карт` }}</span>
       <span v-if="lowRules" class="hi-lo-badge">Hi-Lo</span>
@@ -111,6 +118,26 @@ function getPlayerBetPosition(playerIndex) {
   return {
     left: `${betLeft}%`,
     top: `${betTop}%`
+  }
+}
+
+function getPlayerWinningsPosition(playerIndex) {
+  const seatPos = getPlayerPosition(playerIndex, playerCount.value)
+  const seatLeft = parseFloat(seatPos.left)
+  const seatTop = parseFloat(seatPos.top)
+  
+  // Вектор от центра к месту игрока
+  const dx = seatLeft - 50
+  const dy = seatTop - 50
+  
+  // Для выигрышей сдвигаем ближе к игроку (на 40% расстояния от центра)
+  const factor = 0.4
+  const winLeft = 50 + dx * factor
+  const winTop = 50 + dy * factor
+  
+  return {
+    left: `${winLeft}%`,
+    top: `${winTop}%`
   }
 }
 </script>
@@ -187,6 +214,27 @@ function getPlayerBetPosition(playerIndex) {
   position: absolute;
   transform: translate(-50%, -50%);
   z-index: 5;
+}
+
+.player-winnings {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  z-index: 6;
+  animation: winningsPulse 0.5s ease-out;
+}
+
+@keyframes winningsPulse {
+  0% {
+    transform: translate(-50%, -50%) scale(0.5);
+    opacity: 0;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.2);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
 }
 
 .game-info {
