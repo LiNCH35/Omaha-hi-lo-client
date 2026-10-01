@@ -15,19 +15,8 @@ function getLoggerStore() {
 }
 
 export function debugLog(event, details = {}) {
-  const logger = getLoggerStore()
-  
-  // Format message for display
-  const message = `${event}${Object.keys(details).length > 0 ? ': ' + JSON.stringify(details) : ''}`
-  
-  // Also log to console for backward compatibility
+  // Debug events stay in the console only - the chat log shows info and above
   console.log(`[POKER-DEBUG] ${event}`, details)
-  
-  // Add to logger store if available
-  if (logger) {
-    logger.debug(event)
-  }
-  
   return { event, details, timestamp: new Date().toISOString() }
 }
 

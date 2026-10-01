@@ -37,7 +37,12 @@
       Колода: {{ cardDeck.length }} карт
     </div>
     <div v-if="step !== 'end'" class="pot-display-center">
-      <PokerChips :amount="pot" :compact="false" :show-amount="true" />
+      <div class="pot-stacks">
+        <div v-for="(stack, i) in displayPots" :key="i" class="pot-stack">
+          <PokerChips :amount="stack.amount" :compact="true" :show-amount="true" />
+          <span v-if="displayPots.length > 1" class="pot-label">Пот {{ i + 1 }}</span>
+        </div>
+      </div>
     </div>
     <!-- Фишки ставок игроков на столе -->
     <template v-for="(player, k) in players" :key="`bet-${player.name}`">
@@ -61,8 +66,10 @@
 
 <script setup>
 import { storeToRefs } from 'pinia'
+import { computed } from 'vue'
 import { useGameStore } from '@/stores/game'
 import { getPlayerPosition } from '@/helpers/seatLayout'
+import { buildPots } from '@/helpers/sidePots'
 import Seat from './Seat'
 import PokerCard from './PokerCard'
 import PokerChips from './PokerChips'
@@ -97,6 +104,33 @@ const {
 function seatStyle(k) {
   return getPlayerPosition(k, playerCount.value)
 }
+
+const displayPots = computed(() => {
+  if (pot.value <= 0) {
+    return []
+  }
+  const hasAllIn = players.value.some(p => !p.hasFolded && p.chips === 0 && (p.totalBet || 0) > 0)
+  if (!hasAllIn) {
+    return [{ amount: pot.value }]
+  }
+  const sweptPlayers = players.value.map(p => ({
+    hasFolded: p.hasFolded,
+    totalBet: Math.max(0, (p.totalBet || 0) - (p.currentBet || 0))
+  }))
+  const { pots, refund } = buildPots(sweptPlayers)
+  if (pots.length <= 1) {
+    return [{ amount: pot.value }]
+  }
+  const stacks = pots.map(p => ({ amount: p.amount }))
+  if (refund && refund.amount > 0 && stacks.length > 0) {
+    stacks[stacks.length - 1].amount += refund.amount
+  }
+  const formed = stacks.reduce((sum, stack) => sum + stack.amount, 0)
+  if (stacks.length > 0 && formed !== pot.value) {
+    stacks[stacks.length - 1].amount += pot.value - formed
+  }
+  return stacks
+})
 
 function getPlayerBetPosition(playerIndex) {
   const seatPos = getPlayerPosition(playerIndex, playerCount.value)
@@ -189,6 +223,30 @@ function getPlayerBetPosition(playerIndex) {
   left: 50%;
   transform: translate(-50%, -50%);
   z-index: 10;
+}
+
+.pot-stacks {
+  display: flex;
+  gap: 14px;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.pot-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.pot-label {
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
 }
 
 .player-bet-chips {

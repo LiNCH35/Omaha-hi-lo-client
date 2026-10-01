@@ -3,9 +3,9 @@ import { defineStore } from 'pinia'
 import cardDeckConfig from '@/config/cardDeck'
 import shuffle from '@/helpers/shuffle'
 import { createDefaultPlayers } from '@/helpers/players'
-import { 
-  calculateMaxPlayers, 
-  generateAvailablePlayerCounts, 
+import {
+  calculateMaxPlayers,
+  generateAvailablePlayerCounts,
   getBoardText,
   validateRaiseAmount as validateRaiseAmountHelper,
   getBotDecision,
@@ -15,12 +15,22 @@ import {
   isBoardCardInBothHands as isBoardCardInBothHandsHelper,
   resetPlayerState,
   DEFAULT_CHIPS,
+  SMALL_BLIND,
+  BIG_BLIND,
   HUMAN_PLAYER_INDEX
 } from '@/helpers/gameLogic'
 import { GameEngine } from '@/simulation'
-import { debugLog } from '@/helpers/debugLogger'
+import { debugLog, infoLog } from '@/helpers/debugLogger'
 
 export const SETTINGS_STORAGE_KEY = 'pokerGameSettings'
+
+export const BLIND_PRESETS = {
+  deepstack: { label: '🐢 Медленный / Deepstack (20–35 раздач)', hands: 25 },
+  regular: { label: '🟢 Обычный (10–20 раздач)', hands: 15 },
+  turbo: { label: '🟡 Turbo (5–10 раздач)', hands: 8 },
+  hyper: { label: '🔴 Hyper-Turbo (1–4 раздачи)', hands: 3 },
+  ultra: { label: '⚡ Super/Ultra Hyper (0–2 раздачи)', hands: 1 }
+}
 
 export const useGameStore = defineStore('game', () => {
   // State
@@ -44,6 +54,13 @@ export const useGameStore = defineStore('game', () => {
   const isProcessingAction = ref(false)
   const initialized = ref(false)
   const dealerIndex = ref(0)
+  const potLimit = ref(true)
+  const bigBlindBase = ref(BIG_BLIND)
+  const smallBlind = ref(SMALL_BLIND)
+  const bigBlind = ref(BIG_BLIND)
+  const blindPreset = ref('regular')
+  const handsPerLevel = ref(15)
+  const handsPlayed = ref(0)
 
   // Simulation engine
   let gameEngine = null
@@ -82,6 +99,9 @@ export const useGameStore = defineStore('game', () => {
       getShowCardsAtEnd: () => showCardsAtEnd.value,
       getShowHiCards: () => showHiCards.value,
       getShowLoCards: () => showLoCards.value,
+      getPotLimit: () => potLimit.value,
+      getSmallBlind: () => smallBlind.value,
+      getBigBlind: () => bigBlind.value,
       
       setStep: (value) => { step.value = value },
       setPot: (value) => { pot.value = value },
@@ -122,7 +142,11 @@ export const useGameStore = defineStore('game', () => {
         playerCount: playerCount.value,
         lowRules: lowRules.value,
         simulationMode: simulationMode.value,
-        showCardsAtEnd: showCardsAtEnd.value
+        showCardsAtEnd: showCardsAtEnd.value,
+        potLimit: potLimit.value,
+        bigBlindBase: bigBlindBase.value,
+        blindPreset: blindPreset.value,
+        handsPerLevel: handsPerLevel.value
       }))
     } catch (error) {
       debugLog('settings:save-error', { source, error: String(error) })
@@ -148,6 +172,26 @@ export const useGameStore = defineStore('game', () => {
     }
     if (patch.showCardsAtEnd !== undefined && patch.showCardsAtEnd !== showCardsAtEnd.value) {
       showCardsAtEnd.value = patch.showCardsAtEnd
+    }
+    if (patch.potLimit !== undefined && patch.potLimit !== potLimit.value) {
+      potLimit.value = patch.potLimit
+    }
+    if (patch.bigBlindBase !== undefined && patch.bigBlindBase !== bigBlindBase.value) {
+      const base = Math.max(2, parseInt(patch.bigBlindBase, 10) || BIG_BLIND)
+      bigBlindBase.value = base
+      bigBlind.value = base
+      smallBlind.value = Math.max(1, Math.floor(base / 2))
+      handsPlayed.value = 0
+    }
+    if (patch.blindPreset !== undefined && patch.blindPreset !== blindPreset.value) {
+      blindPreset.value = patch.blindPreset
+      const presetHands = BLIND_PRESETS[patch.blindPreset]?.hands
+      if (presetHands !== undefined) {
+        handsPerLevel.value = presetHands
+      }
+    }
+    if (patch.handsPerLevel !== undefined && patch.handsPerLevel !== handsPerLevel.value) {
+      handsPerLevel.value = Math.max(0, parseInt(patch.handsPerLevel, 10) || 0)
     }
     saveSettingsToStorage(source)
     if (reset && initialized.value) {
@@ -224,6 +268,12 @@ export const useGameStore = defineStore('game', () => {
       }
       dealerIndex.value = newDealerIndex
       debugLog('game:newHand:dealer-moved', { from: dealerIndex.value, to: newDealerIndex })
+      handsPlayed.value++
+      if (handsPerLevel.value > 0 && handsPlayed.value % handsPerLevel.value === 0) {
+        bigBlind.value *= 2
+        smallBlind.value = Math.max(1, Math.floor(bigBlind.value / 2))
+        infoLog(`Уровень блайндов повышен: SB $${smallBlind.value} / BB $${bigBlind.value}`)
+      }
     }
     resetGame(true)
   }
@@ -242,6 +292,9 @@ export const useGameStore = defineStore('game', () => {
       player.showCards = false
       player.winnings = 0
     })
+    bigBlind.value = bigBlindBase.value
+    smallBlind.value = Math.max(1, Math.floor(bigBlind.value / 2))
+    handsPlayed.value = 0
     step.value = ''
     debugLog('game:resetFullGame:done', { after: snapshot() })
   }
@@ -403,8 +456,9 @@ export const useGameStore = defineStore('game', () => {
 
   function validateRaiseAmount() {
     const player = players.value[HUMAN_PLAYER_INDEX]
-    const maxOwn = player ? player.currentBet + player.chips : pot.value
-    const maxRaise = Math.min(currentBet.value + pot.value, maxOwn)
+    const maxOwn = player ? player.currentBet + player.chips : 0
+    const fullPot = pot.value + players.value.reduce((sum, p) => sum + (p.currentBet || 0), 0)
+    const maxRaise = potLimit.value ? Math.min(currentBet.value + fullPot, maxOwn) : maxOwn
     raiseAmount.value = validateRaiseAmountHelper(raiseAmount.value, maxRaise)
   }
 
@@ -433,6 +487,14 @@ export const useGameStore = defineStore('game', () => {
     availablePlayerCounts,
     boardText,
     dealerIndex,
+    potLimit,
+    smallBlind,
+    bigBlind,
+    bigBlindBase,
+    blindPreset,
+    handsPerLevel,
+    handsPlayed,
+    BLIND_PRESETS,
     loadSettings,
     applySettings,
     saveSettingsToStorage,

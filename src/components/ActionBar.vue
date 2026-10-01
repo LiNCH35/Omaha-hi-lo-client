@@ -87,7 +87,8 @@ const currentPlayerChips = computed(() => {
 const maxRaise = computed(() => {
   const player = players.value[0]
   const maxOwn = player ? player.currentBet + player.chips : 0
-  return Math.min(currentBet.value + pot.value, maxOwn)
+  const fullPot = pot.value + players.value.reduce((sum, p) => sum + (p.currentBet || 0), 0)
+  return store.potLimit ? Math.min(currentBet.value + fullPot, maxOwn) : maxOwn
 })
 
 const hasActivePlayers = computed(() => {

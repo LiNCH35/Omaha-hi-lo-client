@@ -465,11 +465,71 @@ export function determineWinner(players, boardCards, evaluateLow = false) {
 }
 
 /**
+ * Подсчёт аутов для рук с 6+ карманными картами: сколько неизвестных карт
+ * делают хай (или лоу) руку натсовой. Если рука уже натс - значение отрицательное.
+ * @returns {Object|null} { hi, low } или null если ауты не считаются
+ */
+export function calculateOuts(playerCards, boardCards, evaluateLow = false) {
+  if (playerCards.length < 6 || boardCards.length < 3) {
+    return null
+  }
+
+  const ranks = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A']
+  const suits = ['s', 'h', 'd', 'c']
+  const usedCodes = new Set([...playerCards, ...boardCards].map(card => `${card.rank}${card.suit}`))
+
+  const current = evaluateHand(playerCards, boardCards, evaluateLow)
+  const currentHiScore = current.score
+  const currentLowScore = current.lowScore
+
+  let nutsHiScore = Infinity
+  let hiNutCards = 0
+  let nutsLowScore = Infinity
+  let lowNutCards = 0
+
+  for (const rank of ranks) {
+    for (const suit of suits) {
+      if (usedCodes.has(rank + suit)) {
+        continue
+      }
+      const upgraded = evaluateHand([...playerCards, { rank, suit }], boardCards, evaluateLow)
+      if (upgraded.score < nutsHiScore) {
+        nutsHiScore = upgraded.score
+        hiNutCards = 1
+      } else if (upgraded.score === nutsHiScore) {
+        hiNutCards++
+      }
+      if (evaluateLow && upgraded.lowScore < nutsLowScore) {
+        nutsLowScore = upgraded.lowScore
+        lowNutCards = 1
+      } else if (evaluateLow && upgraded.lowScore === nutsLowScore) {
+        lowNutCards++
+      }
+    }
+  }
+
+  const hiOuts = currentHiScore <= nutsHiScore ? -hiNutCards : hiNutCards
+
+  let lowOuts = 0
+  if (evaluateLow) {
+    if (nutsLowScore === Infinity) {
+      lowOuts = 0
+    } else if (currentLowScore === nutsLowScore) {
+      lowOuts = -lowNutCards
+    } else {
+      lowOuts = lowNutCards
+    }
+  }
+
+  return { hi: hiOuts, low: lowOuts }
+}
+
+/**
  * Вспомогательная функция для получения комбинаций
  */
 function getCombinations(array, size) {
   const result = []
-  
+
   function combine(start, combo) {
     if (combo.length === size) {
       result.push([...combo])

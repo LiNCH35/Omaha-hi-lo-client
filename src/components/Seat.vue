@@ -27,6 +27,9 @@
         <p v-if="!simulationMode && player.startingHandEvaluation !== null && player.startingHandEvaluation !== undefined" class="hand-evaluation">
           Оценка: {{ player.startingHandEvaluation.toFixed(1) }}
         </p>
+        <p v-if="!simulationMode && player.outs" class="outs-info">
+          Ауты ↑{{ player.outs.hi }} ↓{{ player.outs.low }}
+        </p>
         <div v-if="player.combinations && (player.combinations.hi || player.combinations.lo)" class="combinations">
           <div
             v-if="player.combinations.hi"
@@ -283,6 +286,19 @@ export default {
     display: flex;
     justify-content: center;
     margin-top: 2px;
+  }
+
+  .outs-info {
+    font-size: 8px;
+    color: #00bcd4;
+    font-weight: 600;
+    background: rgba(0, 188, 212, 0.15);
+    padding: 2px 6px;
+    border-radius: 4px;
+    display: flex;
+    justify-content: center;
+    margin-top: 2px;
+    white-space: nowrap;
   }
 
   .combinations {

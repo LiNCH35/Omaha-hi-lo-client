@@ -182,6 +182,7 @@ export function resetPlayerState(player, chips) {
   player.hasActed = false
   player.showCards = false
   player.winnings = 0
+  player.outs = null
   if (chips !== undefined) {
     player.chips = chips
   }
