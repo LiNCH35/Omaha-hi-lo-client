@@ -27,9 +27,10 @@
         <p v-if="!simulationMode && player.startingHandEvaluation !== null && player.startingHandEvaluation !== undefined" class="hand-evaluation">
           Оценка: {{ player.startingHandEvaluation.toFixed(1) }}
         </p>
-        <p v-if="!simulationMode && player.outs" class="outs-info">
-          Ауты ↑{{ player.outs.hi }} ↓{{ player.outs.low }}
-        </p>
+        <template v-if="player.outs && (!simulationMode || playerIndex === 0)">
+          <p class="outs-info" title="Клик — список аутов в консоли" @click="logOuts('hi')">Хи ауты: {{ formatOut(player.outs.hi) }}</p>
+          <p v-if="lowRules" class="outs-info" title="Клик — список аутов в консоли" @click="logOuts('low')">Ло ауты: {{ formatOut(player.outs.low) }}</p>
+        </template>
         <div v-if="player.combinations && (player.combinations.hi || player.combinations.lo)" class="combinations">
           <div
             v-if="player.combinations.hi"
@@ -106,10 +107,14 @@ export default {
       type: Boolean,
       default: false
     },
-    isDealer: {
-      type: Boolean,
-      default: false
-    }
+  isDealer: {
+    type: Boolean,
+    default: false
+  },
+  lowRules: {
+    type: Boolean,
+    default: false
+  }
   },
   data() {
     return {
@@ -130,6 +135,22 @@ export default {
     }
   },
   methods: {
+    formatOut(value) {
+      return value < 0 ? `натс (${value})` : `${value}`
+    },
+    logOuts(kind) {
+      const outs = this.player.outs
+      if (!outs) {
+        return
+      }
+      const label = kind === 'hi' ? 'Хи' : 'Ло'
+      const value = outs[kind]
+      const isNuts = value < 0
+      const cards = (kind === 'hi' ? outs.hiCards : outs.lowCards) || []
+      const cardList = cards.length > 0 ? cards.join(' ') : '—'
+      const note = isNuts ? ' (рука уже натс, карты держат лучший результат)' : ' (карты дают натс на следующей улице)'
+      console.log(`[POKER-OUTS] ${this.player.name} — ${label} ауты на натс: ${value}${note}; карты: ${cardList}`)
+    },
     comboHand(type) {
       return type === 'hi' ? this.player.bestHand : this.player.lowHand
     },

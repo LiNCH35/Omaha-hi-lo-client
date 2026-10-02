@@ -8,6 +8,7 @@
         :simulationMode="simulationMode"
         :isCurrentPlayer="simulationMode && k === currentPlayerIndex"
         :isDealer="k === dealerIndex"
+        :lowRules="lowRules"
         :style="seatStyle(k)"
         class="player-seat"
         @player-hover="onPlayerHover"

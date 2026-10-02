@@ -1,5 +1,6 @@
 import { HUMAN_PLAYER_INDEX, getBotDecision } from '@/helpers/gameLogic'
-import { determineWinner, translateHandDescription, calculateOuts } from '@/helpers/pokerEvaluator'
+import { determineWinner, translateHandDescription } from '@/helpers/pokerEvaluator'
+import { appCardToCode, cardToString, evaluateOmaha, getAbsoluteNuts, getNutOuts } from '@/helpers/hiLowEvaluator'
 import { evaluateStartingHand } from '@/helpers/evaluateStartingHand'
 import { debugLog, infoLog, successLog, warningLog, errorLog } from '@/helpers/debugLogger'
 import { buildPots, distributePots } from '@/helpers/sidePots'
@@ -538,19 +539,32 @@ export class GameEngine {
   }
 
   /**
-   * Count outs (cards that make the hand the nuts) for players with 6+ hole cards
-   * Negative value means the hand is already the nuts
+   * Count nut outs (cards giving an unbeatable hand) for players with 6+ hole cards.
+   * Only on flop and turn (3-4 board cards); on river the hand is complete.
+   * Negative value means the hand is already the nuts.
    */
   calculatePlayerOuts() {
     const players = this.store.getPlayers()
     const boardCards = this.store.getBoardCards()
-    const lowRules = this.store.getLowRules()
     if (boardCards.length < 3) {
       return
     }
+    const shouldCount = boardCards.length <= 4
     players.forEach(player => {
-      if (!player.hasFolded && player.cards.length >= 6) {
-        player.outs = calculateOuts(player.cards, boardCards, lowRules)
+      if (shouldCount && !player.hasFolded && player.cards.length >= 6) {
+        const hole = player.cards.map(appCardToCode)
+        const board = boardCards.map(appCardToCode)
+        const result = getNutOuts(hole, board, hole)
+        const current = evaluateOmaha(hole, board)
+        const nutsNow = getAbsoluteNuts(board, hole)
+        const alreadyHigh = current.high >= nutsNow.high
+        const alreadyLow = current.low !== 0 && (nutsNow.low === 0 || current.low <= nutsNow.low)
+        player.outs = {
+          hi: alreadyHigh ? -result.counts.keepHigh : result.counts.nutHigh,
+          low: alreadyLow ? -result.counts.keepLow : result.counts.nutLow,
+          hiCards: alreadyHigh ? result.keepHighCards.map(cardToString) : result.nutHigh.map(cardToString),
+          lowCards: alreadyLow ? result.keepLowCards.map(cardToString) : result.nutLow.map(cardToString)
+        }
       } else {
         player.outs = null
       }
