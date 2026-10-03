@@ -16,6 +16,7 @@ export class GameEngine {
   constructor(store) {
     this.store = store
     this.timers = []
+    this.decisionProvider = null
   }
 
   /**
@@ -411,7 +412,18 @@ export class GameEngine {
       return
     }
     
-    const action = getBotDecision(player, this.store.getCurrentBet())
+    let action = null
+    if (this.decisionProvider) {
+      try {
+        action = this.decisionProvider(this.store, currentPlayerIndex)
+      } catch (error) {
+        warningLog('Нейро-решение недоступно, используется обычный бот', { player: player.name, error: String(error) })
+        action = null
+      }
+    }
+    if (!action) {
+      action = getBotDecision(player, this.store.getCurrentBet())
+    }
     debugLog('action:bot:decision', { player: player.name, action })
     this.applyAction(currentPlayerIndex, action)
     this.nextPlayer()

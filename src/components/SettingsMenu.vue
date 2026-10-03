@@ -55,6 +55,17 @@
           </div>
 
           <div class="setting-item">
+            <label for="neuralBot">Нейро-боты (ML):</label>
+            <input
+              type="checkbox"
+              id="neuralBot"
+              v-model="neuralBotModel"
+            >
+          </div>
+
+          <div v-if="neuralBotStatus" class="blind-info">{{ neuralBotStatus }}</div>
+
+          <div class="setting-item">
             <label for="showCardsAtEnd">Открывать карты в конце раздачи:</label>
             <input
               type="checkbox"
@@ -148,6 +159,13 @@ const simulationModeModel = computed({
   get: () => store.simulationMode,
   set: value => store.applySettings({ simulationMode: value }, 'SettingsMenu:simulationMode')
 })
+
+const neuralBotModel = computed({
+  get: () => store.neuralBot,
+  set: value => (value ? store.enableNeuralBot() : store.disableNeuralBot())
+})
+
+const neuralBotStatus = computed(() => store.neuralBotStatus)
 
 const showCardsAtEndModel = computed({
   get: () => store.showCardsAtEnd,

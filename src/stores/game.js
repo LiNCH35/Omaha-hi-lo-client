@@ -20,7 +20,7 @@ import {
   HUMAN_PLAYER_INDEX
 } from '@/helpers/gameLogic'
 import { GameEngine } from '@/simulation'
-import { debugLog, infoLog } from '@/helpers/debugLogger'
+import { debugLog, infoLog, errorLog } from '@/helpers/debugLogger'
 
 export const SETTINGS_STORAGE_KEY = 'pokerGameSettings'
 
@@ -61,6 +61,8 @@ export const useGameStore = defineStore('game', () => {
   const blindPreset = ref('regular')
   const handsPerLevel = ref(15)
   const handsPlayed = ref(0)
+  const neuralBot = ref(false)
+  const neuralBotStatus = ref('')
 
   // Simulation engine
   let gameEngine = null
@@ -304,6 +306,35 @@ export const useGameStore = defineStore('game', () => {
     gameEngine.startHand()
   }
 
+  async function enableNeuralBot() {
+    if (neuralBot.value) {
+      return
+    }
+    neuralBotStatus.value = 'Загрузка нейро-моделей...'
+    try {
+      const neuralBotModule = await import('@/helpers/neuralBot')
+      await neuralBotModule.loadNeuralModels('models')
+      initGameEngine()
+      gameEngine.decisionProvider = neuralBotModule.neuralDecision
+      neuralBot.value = true
+      neuralBotStatus.value = 'Нейро-боты активны'
+      infoLog('Нейро-боты включены')
+    } catch (error) {
+      neuralBot.value = false
+      neuralBotStatus.value = `Ошибка загрузки: ${error}`
+      errorLog('Не удалось включить нейро-ботов', { error: String(error) })
+    }
+  }
+
+  function disableNeuralBot() {
+    if (gameEngine) {
+      gameEngine.decisionProvider = null
+    }
+    neuralBot.value = false
+    neuralBotStatus.value = ''
+    infoLog('Нейро-боты выключены')
+  }
+
   function next() {
     debugLog('game:next', { step: step.value })
     if (step.value === 'preflop') {
@@ -494,6 +525,10 @@ export const useGameStore = defineStore('game', () => {
     blindPreset,
     handsPerLevel,
     handsPlayed,
+    neuralBot,
+    neuralBotStatus,
+    enableNeuralBot,
+    disableNeuralBot,
     BLIND_PRESETS,
     loadSettings,
     applySettings,

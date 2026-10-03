@@ -1,0 +1,477 @@
+Да. Я бы строил первую версию не как «нейросеть, которая играет в покер», а как модель оценки состояния раздачи. Потом поверх неё можно обучить policy.
+
+1. Общий вход
+Я бы сделал примерно такой вектор:
+
+GAME
+  street
+  players
+  position
+  pot_bb
+  effective_stack_bb
+  SPR
+  amount_to_call_bb
+  current_bet_bb
+  pot_odds
+
+PREFLOP
+  preflop_score
+  preflop_rank_percentile
+
+HAND
+  high_strength
+  low_strength
+  nut_high
+  nut_low
+  high_outs
+  low_outs
+  clean_high_outs
+  clean_low_outs
+  nut_preserving_cards
+  redraw_count
+
+DRAW
+  scoop_potential
+  high_to_nut_probability
+  low_to_nut_probability
+  high_low_overlap
+  backdoor_high
+  backdoor_low
+
+BOARD
+  paired
+  flush_possible
+  straight_possible
+  low_possible
+  board_low_cards
+  board_high_cards
+  board_texture
+
+ACTION
+  previous_action
+  bet_to_pot
+  raises_on_street
+  aggression
+
+Не обязательно реализовывать всё сразу.
+
+2. Версия V1 — я бы начал всего с ~20 признаков
+Это важно: не надо сразу делать 100 признаков. Иначе потом будет трудно понять, что действительно помогает.
+
+Game
+street                 0=preflop, 1=flop, 2=turn, 3=river
+players_remaining
+position
+pot_bb
+effective_stack_bb
+SPR
+amount_to_call_bb
+bet_to_pot
+
+Hand
+preflop_score
+high_strength
+low_strength
+high_outs
+low_outs
+clean_high_outs
+clean_low_outs
+nut_high
+nut_low
+nut_preserving_cards
+
+Board
+paired_board
+flush_possible
+straight_possible
+low_possible
+
+Итого около 20–25.
+
+Этого уже достаточно для первой серьёзной модели.
+
+3. Но я бы изменил твою идею с «количеством аутов»
+Самое важное здесь — не все outs одинаковые.
+
+Допустим, у тебя 10 аутов.
+
+Модель должна знать не только:
+
+outs = 10
+
+а примерно:
+
+clean_outs = 6
+dirty_outs = 4
+
+Например
+Карта A:
+
+превращает твою руку в nut-high и nut-low.
+
+Это великолепный out.
+
+Карта B:
+
+даёт тебе хороший high, но соперник может получить более высокий flush.
+
+Это уже гораздо менее ценный out.
+
+Поэтому я бы ввёл:
+
+raw_outs
+clean_outs
+dirty_outs
+nut_outs
+scoop_outs
+
+4. Nut-preserving cards
+Твоя идея здесь очень хорошая.
+
+Но я бы формализовал её.
+
+Пусть после текущей улицы возможны карты:
+
+C = {c1, c2, ..., cn}
+
+Для каждой следующей карты c проверяем:
+
+остаётся ли моя рука nuts после появления c?
+
+Тогда:
+
+nut_preserving_cards =
+    количество c, после которых я всё ещё имею nuts
+
+Например:
+
+current = nut flush
+
+47 неизвестных карт
+
+38 → nuts остаются nuts
+9  → появляются higher/full-house/etc. варианты
+
+Получаем:
+
+nut_preserving_cards = 38
+
+Это потенциально очень сильный feature.
+
+5. Ещё лучше — сделать процент
+Количество само по себе зависит от улицы.
+
+Поэтому:
+
+nut_preserving_ratio =
+    nut_preserving_cards / unseen_cards
+
+Аналогично:
+
+high_outs_ratio
+low_outs_ratio
+clean_high_outs_ratio
+clean_low_outs_ratio
+
+Тогда модель получает более нормализованные признаки.
+
+6. Scoop potential
+Вот это я бы сделал одним из ключевых признаков именно для Hi-Lo.
+
+Не:
+
+P(high)
+P(low)
+
+по отдельности.
+
+А:
+
+P(scoop)
+
+То есть вероятность забрать весь банк.
+
+Например:
+
+P(high win) = 0.72
+P(low win)  = 0.68
+P(scoop)    = 0.49
+
+Это совсем другая информация.
+
+Причём можно сделать ещё:
+
+P(high only)
+P(low only)
+P(scoop)
+P(quarter)
+P(lose)
+
+Получается гораздо более содержательное описание руки.
+
+7. Я бы добавил equity из симулятора
+И вот здесь, на мой взгляд, начинается самое интересное.
+
+Для каждой позиции можно сделать Monte Carlo.
+
+Например 100 000 симуляций:
+
+high_win       = 0.73
+low_win        = 0.61
+scoop          = 0.44
+quarter        = 0.08
+lose           = 0.18
+
+Эти величины можно использовать двумя способами.
+
+Вариант A — как target
+Сеть должна научиться сама приближать:
+
+state → equity
+
+Вариант B — как дополнительные features
+Тогда:
+
+outs → network → decision
+
+но одновременно:
+
+Monte Carlo equity → network → decision
+
+Я бы предпочёл A, если вычислительно это возможно.
+
+8. Очень важный момент: opponents
+На ранней версии я бы вообще не пытался моделировать конкретную руку соперника.
+
+Но обязательно добавил бы:
+
+players_remaining
+
+Потому что:
+
+equity vs 1 opponent
+
+и
+
+equity vs 5 opponents
+
+— совершенно разные вещи.
+
+Позже можно добавить:
+
+opponent_range_strength
+opponent_aggression
+opponent_position
+
+Но это уже V2/V3.
+
+9. SPR я считаю обязательным
+Вот это:
+
+SPR = effective_stack / pot
+
+может оказаться одним из самых важных признаков на поздних улицах.
+
+Представь две ситуации.
+
+Ситуация A
+pot = 10 BB
+stack = 100 BB
+
+SPR = 10
+
+Ситуация B
+pot = 100 BB
+stack = 20 BB
+
+SPR = 0.2
+
+Даже если карты и outs почти одинаковые, пространство решений совершенно разное.
+
+Поэтому сеть должна явно видеть:
+
+SPR
+
+10. Пот-оддсы тоже не надо заставлять сеть вычислять
+Лучше дать ей непосредственно:
+
+pot_odds
+
+Например:
+
+pot = 100 BB
+call = 25 BB
+
+pot_odds ≈ 20%
+
+И сеть уже может самостоятельно обнаружить:
+
+«Моя вероятность реализации руки выше стоимости колла».
+
+Причём я бы дал и абсолютные, и нормализованные значения:
+
+pot_bb
+call_bb
+call_to_pot
+SPR
+
+11. Поздняя улица должна выглядеть иначе
+На river уже нет смысла давать:
+
+turn_outs
+
+Потому что следующей карты нет.
+
+Там я бы переключался на:
+
+made_high_strength
+made_low_strength
+nut_high
+nut_low
+scoop_probability
+split_probability
+number_of_better_possible_hands
+number_of_worse_possible_hands
+pot_odds
+SPR
+
+То есть модель фактически получает:
+
+«Насколько сильна моя готовая рука относительно возможных рук соперника и сколько стоит решение?»
+
+12. Поэтому я бы сделал динамические features
+Очень простая схема:
+
+Preflop
+PRE_FLOP_SCORE
+position
+players
+stack
+action
+
+Flop
+PRE_FLOP_SCORE
++
+high/low strength
++
+outs
++
+clean outs
++
+nut preservation
++
+board texture
++
+SPR
++
+pot odds
+
+Turn
+То же самое, но уже с гораздо большим весом:
+
+current_hand
+draw_quality
+nut_preservation
+scoop_probability
+SPR
+pot_odds
+
+River
+made_hand
+nut_status
+scoop_probability
+split_probability
+relative_strength
+SPR
+pot_odds
+
+13. А target я бы сделал не fold/call/raise
+Вот это, пожалуй, главное архитектурное решение.
+
+Я бы сначала обучал:
+
+STATE → EV
+
+То есть сеть выдаёт:
+
+EV_fold
+EV_call
+EV_raise
+
+Например:
+
+fold  =  0.00 BB
+call  = +1.37 BB
+raise = +2.14 BB
+
+А уже игровой агент выбирает действие.
+
+Почему это удобно?
+
+Потому что ты сможешь смотреть:
+
+Почему сеть решила, что raise лучше call?
+
+И анализировать её ошибки.
+
+14. А ещё лучше — сначала обучить equity network
+Я бы вообще сделал два этапа.
+
+Network 1
+state → hand/equity representation
+
+Предсказывает:
+
+P(high)
+P(low)
+P(scoop)
+P(quarter)
+P(lose)
+
+Network 2
+state + equity representation → EV(action)
+
+Предсказывает:
+
+EV(fold)
+EV(call)
+EV(raise)
+
+Это сильно ближе к нормальной архитектуре игрового агента.
+
+И ещё одна идея, которую я бы обязательно попробовал
+Не выбрасывай свою PRE-FLOP эвристику.
+
+Сделай два эксперимента:
+
+Model A:
+raw cards + game state
+
+и
+
+Model B:
+raw cards + game state + preflop_score
+
+А потом сравни.
+
+Если B значительно лучше — твоя эвристика действительно содержит полезное знание.
+
+Если разницы почти нет — нейросеть сама его извлекает, и тогда preflop_score можно убрать.
+
+То же самое можно сделать с outs.
+
+Получится очень хороший эксперимент:
+
+             raw cards
+                ↓
+          ┌─────────────┐
+state ───→│ neural net  │──→ equity
+          └─────────────┘
+
+             + heuristics
+                ↓
+          ┌─────────────┐
+state ───→│ neural net  │──→ equity
+          └─────────────┘
+
+И тогда ты не будешь заранее гадать, какие признаки важны — это покажут данные.
