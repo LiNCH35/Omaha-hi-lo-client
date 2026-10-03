@@ -16,8 +16,7 @@ import {
   resetPlayerState,
   DEFAULT_CHIPS,
   SMALL_BLIND,
-  BIG_BLIND,
-  HUMAN_PLAYER_INDEX
+  BIG_BLIND
 } from '@/helpers/gameLogic'
 import { GameEngine } from '@/simulation'
 import { debugLog, infoLog, errorLog } from '@/helpers/debugLogger'
@@ -31,6 +30,12 @@ export const BLIND_PRESETS = {
   hyper: { label: '🔴 Hyper-Turbo (1–4 раздачи)', hands: 3 },
   ultra: { label: '⚡ Super/Ultra Hyper (0–2 раздачи)', hands: 1 }
 }
+
+const BLIND_LADDER = [
+  2, 3, 4, 5, 6, 8, 10, 15, 20, 30, 40, 50, 60, 80, 100,
+  150, 200, 300, 400, 500, 600, 800, 1000, 1500, 2000, 3000,
+  4000, 5000, 6000, 8000, 10000, 15000, 20000, 30000, 50000
+]
 
 export const useGameStore = defineStore('game', () => {
   // State
@@ -96,6 +101,7 @@ export const useGameStore = defineStore('game', () => {
       getDealerIndex: () => dealerIndex.value,
       getPlayersActedCount: () => playersActedCount.value,
       getRaiseAmount: () => raiseAmount.value,
+      setRaiseAmount: (value) => { raiseAmount.value = value },
       getSimulationMode: () => simulationMode.value,
       getLowRules: () => lowRules.value,
       getShowCardsAtEnd: () => showCardsAtEnd.value,
@@ -148,7 +154,8 @@ export const useGameStore = defineStore('game', () => {
         potLimit: potLimit.value,
         bigBlindBase: bigBlindBase.value,
         blindPreset: blindPreset.value,
-        handsPerLevel: handsPerLevel.value
+        handsPerLevel: handsPerLevel.value,
+        neuralBot: neuralBot.value
       }))
     } catch (error) {
       debugLog('settings:save-error', { source, error: String(error) })
@@ -222,6 +229,9 @@ export const useGameStore = defineStore('game', () => {
     applySettings(settings || {}, { source, reset: false })
     players.value = createDefaultPlayers({ hasPlayer: true, length: playerCount.value })
     initialized.value = true
+    if (settings?.neuralBot) {
+      enableNeuralBot()
+    }
     debugLog('settings:load-done')
   }
 
@@ -241,7 +251,7 @@ export const useGameStore = defineStore('game', () => {
     currentPlayerIndex.value = 0
     gamePhase.value = 'betting'
     playersActedCount.value = 0
-    raiseAmount.value = 20
+    raiseAmount.value = smallBlind.value
     isProcessingAction.value = false
     cardDeck.value = [...cardDeckConfig]
     players.value.forEach((player, index) => {
@@ -272,7 +282,8 @@ export const useGameStore = defineStore('game', () => {
       debugLog('game:newHand:dealer-moved', { from: dealerIndex.value, to: newDealerIndex })
       handsPlayed.value++
       if (handsPerLevel.value > 0 && handsPlayed.value % handsPerLevel.value === 0) {
-        bigBlind.value *= 2
+        const nextIdx = BLIND_LADDER.findIndex(value => value > bigBlind.value)
+        bigBlind.value = nextIdx === -1 ? bigBlind.value * 2 : BLIND_LADDER[nextIdx]
         smallBlind.value = Math.max(1, Math.floor(bigBlind.value / 2))
         infoLog(`Уровень блайндов повышен: SB $${smallBlind.value} / BB $${bigBlind.value}`)
       }
@@ -318,6 +329,7 @@ export const useGameStore = defineStore('game', () => {
       gameEngine.decisionProvider = neuralBotModule.neuralDecision
       neuralBot.value = true
       neuralBotStatus.value = 'Нейро-боты активны'
+      saveSettingsToStorage('neuralBot')
       infoLog('Нейро-боты включены')
     } catch (error) {
       neuralBot.value = false
@@ -332,6 +344,7 @@ export const useGameStore = defineStore('game', () => {
     }
     neuralBot.value = false
     neuralBotStatus.value = ''
+    saveSettingsToStorage('neuralBot')
     infoLog('Нейро-боты выключены')
   }
 
@@ -382,6 +395,9 @@ export const useGameStore = defineStore('game', () => {
       return
     }
     initGameEngine()
+    if (action === 'raise') {
+      validateRaiseAmount()
+    }
     const ok = gameEngine.applyAction(currentPlayerIndex.value, action)
     isProcessingAction.value = false
     if (ok) {
@@ -486,11 +502,11 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function validateRaiseAmount() {
-    const player = players.value[HUMAN_PLAYER_INDEX]
+    const player = players.value[currentPlayerIndex.value]
     const maxOwn = player ? player.currentBet + player.chips : 0
     const fullPot = pot.value + players.value.reduce((sum, p) => sum + (p.currentBet || 0), 0)
     const maxRaise = potLimit.value ? Math.min(currentBet.value + fullPot, maxOwn) : maxOwn
-    raiseAmount.value = validateRaiseAmountHelper(raiseAmount.value, maxRaise)
+    raiseAmount.value = validateRaiseAmountHelper(raiseAmount.value, maxRaise, currentBet.value + smallBlind.value)
   }
 
   return {

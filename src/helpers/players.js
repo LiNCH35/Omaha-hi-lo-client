@@ -1,6 +1,6 @@
 const COMPUTER_NAME = 'Computer'
 const PLAYER_NAME = 'Player'
-const DEFAULT_CHIPS = 1000
+const DEFAULT_CHIPS = 10000
 
 export function createDefaultPlayers(settings = {length: 8, hasPlayer: true}) {
   const result = []

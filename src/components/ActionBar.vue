@@ -27,9 +27,9 @@
               type="number"
               v-model.number="raiseAmountModel"
               class="raise-input"
-              min="10"
+              :min="minRaiseTo"
               :max="maxRaise"
-              step="10"
+              :step="store.smallBlind"
               @blur="() => store.validateRaiseAmount()"
             />
             <button 
@@ -46,7 +46,8 @@
         <button v-else @click="resetFullGame" class="action-button full-reset-button">Новая игра</button>
       </template>
 
-      <button v-if="step === 'end'" @click="newHand" class="reset-button">Новая раздача</button>
+      <button v-if="step === 'end' && activeCount < 2" @click="resetFullGame" class="action-button full-reset-button">Новая игра</button>
+      <button v-else-if="step === 'end'" @click="newHand" class="reset-button">Новая раздача</button>
     </div>
   </div>
 </template>
@@ -91,8 +92,16 @@ const maxRaise = computed(() => {
   return store.potLimit ? Math.min(currentBet.value + fullPot, maxOwn) : maxOwn
 })
 
+const minRaiseTo = computed(() => {
+  return currentBet.value + store.smallBlind
+})
+
+const activeCount = computed(() => {
+  return players.value.filter((p, i) => i < playerCount.value && p.chips > 0).length
+})
+
 const hasActivePlayers = computed(() => {
-  return players.value.filter((p, i) => i < playerCount.value && p.chips > 0).length > 0
+  return activeCount.value > 0
 })
 
 const isPlayerBankrupt = computed(() => {

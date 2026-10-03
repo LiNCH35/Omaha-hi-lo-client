@@ -98,5 +98,14 @@ export function neuralDecision(store, playerIndex) {
   evInput.dispose()
 
   const toCall = context.currentBet - (context.actor.currentBet || 0)
-  return pickActionFromEv(evOut, toCall, context.actor.chips)
+  const action = pickActionFromEv(evOut, toCall, context.actor.chips, 1, true)
+  if (action === 'raise') {
+    const raiseTo = Math.min(context.currentBet + fullPot, context.actor.currentBet + context.actor.chips)
+    if (raiseTo > context.currentBet) {
+      store.setRaiseAmount(Math.round(raiseTo))
+    } else {
+      return 'call'
+    }
+  }
+  return action
 }

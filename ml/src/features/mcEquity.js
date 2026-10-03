@@ -101,7 +101,7 @@ export function monteCarloEquity({ hole, board, opponents, lowRules = true, sims
   ]
 }
 
-export function mcEquityCurve({ hole, board, opponents, lowRules = true, sims = 800 }) {
+export function mcEquityCurve({ hole, board, opponents, lowRules = true, sims = 800, oppFilter = null, maxFilterTries = 24 }) {
   const oppCount = Math.max(1, opponents | 0)
   const used = new Uint8Array(52)
   for (const c of hole) {
@@ -139,6 +139,23 @@ export function mcEquityCurve({ hole, board, opponents, lowRules = true, sims = 
       const tmp = pool[i]
       pool[i] = pool[j]
       pool[j] = tmp
+    }
+
+    if (oppFilter) {
+      for (let o = 0; o < oppCount; o++) {
+        const base = needsBoard + o * 4
+        for (let t = 0; t < maxFilterTries; t++) {
+          if (oppFilter([pool[base], pool[base + 1], pool[base + 2], pool[base + 3]])) {
+            break
+          }
+          for (let j = 0; j < 4; j++) {
+            const k = nDeal + Math.floor(Math.random() * (pool.length - nDeal))
+            const tmp = pool[base + j]
+            pool[base + j] = pool[k]
+            pool[k] = tmp
+          }
+        }
+      }
     }
 
     const fullBoard = needsBoard > 0 ? board.concat(pool.slice(0, needsBoard)) : board

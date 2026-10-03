@@ -5,7 +5,7 @@ import { pickActionFromEv } from '@/helpers/neuralBot'
 import { loadFastModel } from '../features/fastForward'
 import { buildVector } from '../features/variants'
 
-export function loadNeuralPolicy(modelsDir, { margin = 1, allowRaise = false } = {}) {
+export function loadNeuralPolicy(modelsDir, { margin = 1, allowRaise = false, getRaiseState = null } = {}) {
   const meta = JSON.parse(fs.readFileSync(path.join(modelsDir, 'trainingMeta.json'), 'utf8'))
   const mean = meta.norm.mean
   const std = meta.norm.std
@@ -26,6 +26,16 @@ export function loadNeuralPolicy(modelsDir, { margin = 1, allowRaise = false } =
     const equityOut = equityForward(normalized)
     const evOut = evForward(normalized.concat(Array.from(equityOut)))
     const toCall = context.currentBet - (context.actor.currentBet || 0)
-    return pickActionFromEv(evOut, toCall, context.actor.chips, margin, allowRaise)
+    const action = pickActionFromEv(evOut, toCall, context.actor.chips, margin, allowRaise)
+    if (action === 'raise' && getRaiseState) {
+      const maxTo = (context.actor.currentBet || 0) + context.actor.chips
+      const raiseTo = Math.min(context.currentBet + context.pot, maxTo)
+      if (raiseTo > context.currentBet) {
+        getRaiseState().raiseAmount = Math.round(raiseTo)
+      } else {
+        return 'call'
+      }
+    }
+    return action
   }
 }

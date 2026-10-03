@@ -53,6 +53,9 @@ export class GameEngine {
     if (swept > 0) {
       this.store.addToPot(swept)
     }
+    players.forEach(p => {
+      p.currentBet = 0
+    })
   }
 
   /**
@@ -313,7 +316,7 @@ export class GameEngine {
         const pot = this.getFullPot()
 
         // Invalid raise (not above the current bet) or over the pot limit - fall back to check or call
-        if (additionalBet <= 0 || (this.store.getPotLimit() && additionalBet > callAmount + pot)) {
+        if (additionalBet <= 0 || raiseTotal <= currentBet || (this.store.getPotLimit() && additionalBet > callAmount + pot)) {
           infoLog(`${player.name} хочет рейзить до $${raiseTotal}. Обрабатываем как чек или колл.`)
           // Treat as call to currentBet - don't reset hasActed for other players
           const callAmount = currentBet - player.currentBet
@@ -423,6 +426,14 @@ export class GameEngine {
     }
     if (!action) {
       action = getBotDecision(player, this.store.getCurrentBet())
+    }
+    if (action === 'raise' && this.store.getRaiseAmount() <= this.store.getCurrentBet()) {
+      const raiseTo = Math.min(this.store.getCurrentBet() + this.getFullPot(), player.currentBet + player.chips)
+      if (raiseTo > this.store.getCurrentBet()) {
+        this.store.setRaiseAmount(Math.round(raiseTo))
+      } else {
+        action = 'call'
+      }
     }
     debugLog('action:bot:decision', { player: player.name, action })
     this.applyAction(currentPlayerIndex, action)

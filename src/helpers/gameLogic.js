@@ -1,7 +1,7 @@
 // Game constants
 export const SMALL_BLIND = 10
 export const BIG_BLIND = 20
-export const DEFAULT_CHIPS = 1000
+export const DEFAULT_CHIPS = 10000
 export const HUMAN_PLAYER_INDEX = 0
 
 /**

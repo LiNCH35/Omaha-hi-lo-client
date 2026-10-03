@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createTable, playHand } from './core/runner'
 import { extractFeatures, FEATURE_NAMES } from '@/helpers/neuralFeatures'
+import { appCardToCode, evaluateOmaha, getAbsoluteNuts } from '@/helpers/hiLowEvaluator'
 import { loadNeuralPolicy } from './core/neuralPolicy'
 
 const verbose = process.env.POKER_ML_VERBOSE === '1'
@@ -37,17 +38,61 @@ const explore = opts.explore === '1'
 const policy = opts.policy ?? 'random'
 const raiseProb = parseFloat(opts.raiseProb ?? '0.15')
 const neuralMix = parseFloat(opts.neuralMix ?? '0.85')
+const nutRaiseProb = parseFloat(opts.nutRaiseProb ?? '0')
+const preflopRaiseCap = parseFloat(opts.preflopRaiseCap ?? '0')
 let neuralDecide = null
 if (policy === 'neural') {
   neuralDecide = loadNeuralPolicy(path.resolve(process.cwd(), opts.models ?? 'models'), {
     margin: parseFloat(opts.margin ?? '1'),
-    allowRaise: true
+    allowRaise: true,
+    getRaiseState: () => table.store.state
   })
 }
 
+function holdsNuts(context) {
+  try {
+    const hole = context.actor.cards.map(appCardToCode)
+    const board = context.board.map(appCardToCode)
+    const current = evaluateOmaha(hole, board)
+    const nuts = getAbsoluteNuts(board, hole)
+    if (current.high >= nuts.high) {
+      return true
+    }
+    return current.low !== 0 && (nuts.low === 0 || current.low <= nuts.low)
+  } catch (error) {
+    return false
+  }
+}
+
+function clampRaise(context, action) {
+  if (action !== 'raise' || preflopRaiseCap <= 0 || context.street !== 'preflop') {
+    return action
+  }
+  const cap = Math.round(context.currentBet * preflopRaiseCap)
+  const maxTo = (context.actor.currentBet || 0) + context.actor.chips
+  if (table.store.state.raiseAmount > cap && cap > context.currentBet) {
+    if (cap <= maxTo) {
+      table.store.state.raiseAmount = cap
+      return 'raise'
+    }
+    return 'call'
+  }
+  return action
+}
+
 function decide(context) {
+  if (nutRaiseProb > 0 && context.board.length >= 3 && Math.random() < nutRaiseProb && holdsNuts(context)) {
+    const maxTo = (context.actor.currentBet || 0) + context.actor.chips
+    const candidates = [context.currentBet + context.pot, context.currentBet * 3]
+    let raiseTo = candidates[Math.floor(Math.random() * candidates.length)]
+    raiseTo = Math.min(raiseTo, maxTo)
+    if (raiseTo > context.currentBet) {
+      table.store.state.raiseAmount = Math.round(raiseTo)
+      return clampRaise(context, 'raise')
+    }
+  }
   if (neuralDecide && Math.random() < neuralMix) {
-    return neuralDecide(context)
+    return clampRaise(context, neuralDecide(context))
   }
   if (explore && Math.random() < raiseProb) {
     const maxTo = (context.actor.currentBet || 0) + context.actor.chips
@@ -56,7 +101,7 @@ function decide(context) {
     raiseTo = Math.min(raiseTo, maxTo)
     if (raiseTo > context.currentBet) {
       table.store.state.raiseAmount = Math.round(raiseTo)
-      return 'raise'
+      return clampRaise(context, 'raise')
     }
   }
   const toCall = context.currentBet - (context.actor.currentBet || 0)
@@ -66,7 +111,7 @@ function decide(context) {
   return Math.random() > 0.3 ? 'call' : 'fold'
 }
 
-const useDecisionFn = explore || neuralDecide !== null
+const useDecisionFn = explore || neuralDecide !== null || nutRaiseProb > 0
 
 fs.mkdirSync(path.dirname(outPath), { recursive: true })
 const stream = fs.createWriteStream(outPath, { flags: 'w' })

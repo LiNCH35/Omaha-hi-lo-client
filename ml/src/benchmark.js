@@ -78,9 +78,9 @@ async function main() {
   const neuralSeats = parseInt(opts.neuralSeats ?? String(Math.floor(playerCount / 2)), 10)
 
   const maxDiff = await validateFastAgainstTf(modelsDir)
-  const neuralDecide = loadNeuralPolicy(modelsDir, { margin, allowRaise })
+  const neuralDecide = loadNeuralPolicy(modelsDir, { margin, allowRaise, getRaiseState: () => table.store.state })
   const challengerDecide = modelsDirB
-    ? loadNeuralPolicy(modelsDirB, { margin, allowRaise })
+    ? loadNeuralPolicy(modelsDirB, { margin, allowRaise, getRaiseState: () => table.store.state })
     : null
   if (modelsDirB) {
     await validateFastAgainstTf(modelsDirB)
