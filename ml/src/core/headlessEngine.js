@@ -66,6 +66,8 @@ export class HeadlessEngine extends GameEngine {
     }
 
     const context = buildDecisionContext(this.store, playerIndex)
+    context.actions = this.handActions.slice()
+    context.oppHistory = this.getOppHistory(playerIndex)
     const action = this.decisionFn
       ? this.decisionFn(context)
       : getBotDecision(player, this.store.getCurrentBet())

@@ -25,7 +25,10 @@ export const FEATURE_NAMES = [
   'low_possible',
   'board_low_cards',
   'board_high_cards',
-  'actor_has_acted'
+  'actor_has_acted',
+  'opp_raise_rate',
+  'opp_jam_rate',
+  'opp_hand_aggro'
 ]
 
 const LOW_WORST = 87654
@@ -63,6 +66,23 @@ export function extractFeatures(context, featureSet = 'base') {
   let boardLowCards = 0
   let boardHighCards = 0
   let rawOuts = null
+  let oppRaiseRate = 0.5
+  let oppJamRate = 0
+  let oppHandAggro = 0
+
+  const oppHistory = context.oppHistory
+  if (oppHistory && oppHistory.actions > 0) {
+    oppRaiseRate = oppHistory.raises / oppHistory.actions
+    oppJamRate = oppHistory.raises > 0 ? oppHistory.jams / oppHistory.raises : 0
+  }
+  if (Array.isArray(context.actions)) {
+    for (const a of context.actions) {
+      if (a.seat !== context.actorIndex && a.action === 'raise') {
+        oppHandAggro = 1
+        break
+      }
+    }
+  }
 
   if (board.length >= 3) {
     const rankCounts = new Array(13).fill(0)
@@ -137,7 +157,10 @@ export function extractFeatures(context, featureSet = 'base') {
     lowPossible,
     boardLowCards / 5,
     boardHighCards / 5,
-    context.players[context.actorIndex] && context.players[context.actorIndex].hasActed ? 1 : 0
+    context.players[context.actorIndex] && context.players[context.actorIndex].hasActed ? 1 : 0,
+    oppRaiseRate,
+    oppJamRate,
+    oppHandAggro
   ]
 
   if (featureSet === 'base') {

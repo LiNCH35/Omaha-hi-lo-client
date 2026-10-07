@@ -18,6 +18,7 @@ const epochs = parseInt(opts.epochs ?? '20', 10)
 const batchSize = parseInt(opts.batch ?? '256', 10)
 const valFraction = parseFloat(opts.val ?? '0.1')
 const set = opts.set ?? 'base'
+const warmStart = opts.warmStart ? path.resolve(process.cwd(), opts.warmStart) : null
 const featureNames = FEATURE_SETS[set]
 if (!featureNames) {
   throw new Error(`Unknown feature set: ${set} (available: ${Object.keys(FEATURE_SETS).join(', ')})`)
@@ -57,7 +58,10 @@ async function main() {
     epochs,
     batchSize,
     modelsDir,
-    source: dataPath
+    source: dataPath,
+    evUnits: meta.evUnits,
+    decisionEv: opts.decisionEv === 'trained' || opts.decisionEv === 'analytic' ? opts.decisionEv : meta.decisionEv,
+    warmStart
   })
 
   process.stdout.write(JSON.stringify({

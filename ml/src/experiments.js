@@ -22,6 +22,7 @@ const batchSize = parseInt(opts.batch ?? '256', 10)
 const valFraction = parseFloat(opts.val ?? '0.1')
 const runs = Math.max(1, parseInt(opts.runs ?? '1', 10))
 const limit = opts.limit ? parseInt(opts.limit, 10) : 0
+const warmStartRoot = opts.warmStart ? path.resolve(process.cwd(), opts.warmStart) : null
 const sets = (opts.sets ?? 'base,noPreflop,ratioOuts,nutScoop').split(',').map(s => s.trim()).filter(Boolean)
 for (const set of sets) {
   if (!FEATURE_SETS[set]) {
@@ -32,7 +33,7 @@ for (const set of sets) {
 const rawLines = fs.readFileSync(rawPath, 'utf8').split('\n').filter(Boolean)
 const labelLines = fs.readFileSync(dataPath, 'utf8').split('\n').filter(Boolean)
 JSON.parse(rawLines[0])
-JSON.parse(labelLines[0])
+const labelMeta = JSON.parse(labelLines[0])
 let rawRecs = rawLines.slice(1).map(l => JSON.parse(l)).filter(r => r.t === 'd')
 let labels = labelLines.slice(1).map(l => JSON.parse(l))
 if (limit > 0) {
@@ -120,7 +121,10 @@ async function main() {
         epochs,
         batchSize,
         modelsDir: path.join(modelsRoot, set),
-        source: dataPath
+        source: dataPath,
+        evUnits: labelMeta.evUnits,
+        decisionEv: labelMeta.decisionEv,
+        warmStart: warmStartRoot ? path.join(warmStartRoot, set) : null
       })
       results[set].runs.push({
         equityValMae: metrics.equity.valMae,

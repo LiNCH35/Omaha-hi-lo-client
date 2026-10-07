@@ -1,6 +1,7 @@
 import { createTable, playHand } from './core/runner'
 import { loadNeuralPolicy } from './core/neuralPolicy'
 import { getBotDecision } from '../../src/helpers/gameLogic'
+import { appCardToCode, evaluateOmaha, getAbsoluteNuts } from '../../src/helpers/hiLowEvaluator'
 import fs from 'node:fs'
 import path from 'node:path'
 import * as tf from '@tensorflow/tfjs'
@@ -8,6 +9,44 @@ import { loadFastModel } from './features/fastForward'
 
 function randomDecide(context) {
   return getBotDecision({ currentBet: context.actor.currentBet || 0 }, context.currentBet)
+}
+
+function holdsNuts(context) {
+  try {
+    const hole = context.actor.cards.map(appCardToCode)
+    const board = context.board.map(appCardToCode)
+    if (board.length < 3) {
+      return false
+    }
+    const current = evaluateOmaha(hole, board)
+    const nuts = getAbsoluteNuts(board, hole)
+    if (current.high >= nuts.high) {
+      return true
+    }
+    return current.low !== 0 && (nuts.low === 0 || current.low <= nuts.low)
+  } catch (error) {
+    return false
+  }
+}
+
+function riverStrength(context) {
+  try {
+    const hole = context.actor.cards.map(appCardToCode)
+    const board = context.board.map(appCardToCode)
+    if (board.length !== 5) {
+      return 1
+    }
+    const current = evaluateOmaha(hole, board)
+    const nuts = getAbsoluteNuts(board, hole)
+    return nuts.high > 0 ? current.high / nuts.high : 1
+  } catch (error) {
+    return 1
+  }
+}
+
+function isClosingAction(context) {
+  const others = context.players.filter(p => !p.hasFolded && p.index !== context.actorIndex)
+  return others.every(p => p.hasActed)
 }
 
 async function validateFastAgainstTf(modelsDir) {
@@ -73,14 +112,15 @@ async function main() {
   const lowRules = opts.low !== '0'
   const modelsDir = path.resolve(process.cwd(), opts.models ?? 'models')
   const modelsDirB = opts.modelsB ? path.resolve(process.cwd(), opts.modelsB) : null
-  const margin = parseFloat(opts.margin ?? '1')
+  const decisionEv = opts.decisionEv === 'trained' ? 'trained' : opts.decisionEv === 'analytic' ? 'analytic' : null
+  const margin = parseFloat(opts.margin ?? (decisionEv === 'trained' ? '0.05' : '1'))
   const allowRaise = opts.allowRaise === '1'
   const neuralSeats = parseInt(opts.neuralSeats ?? String(Math.floor(playerCount / 2)), 10)
 
   const maxDiff = await validateFastAgainstTf(modelsDir)
-  const neuralDecide = loadNeuralPolicy(modelsDir, { margin, allowRaise, getRaiseState: () => table.store.state })
+  const neuralDecide = loadNeuralPolicy(modelsDir, { margin, allowRaise, getRaiseState: () => table.store.state, decisionEv })
   const challengerDecide = modelsDirB
-    ? loadNeuralPolicy(modelsDirB, { margin, allowRaise, getRaiseState: () => table.store.state })
+    ? loadNeuralPolicy(modelsDirB, { margin, allowRaise, getRaiseState: () => table.store.state, decisionEv })
     : null
   if (modelsDirB) {
     await validateFastAgainstTf(modelsDirB)
@@ -98,6 +138,45 @@ async function main() {
   }
 
   const failures = []
+  const sanity = {
+    nutSpots: 0,
+    nutPassiveChecks: 0,
+    nutFolds: 0,
+    nutSpotsByStreet: { flop: 0, turn: 0, river: 0 },
+    nutPassiveByStreet: { flop: 0, turn: 0, river: 0 },
+    riverRaiseSpots: 0,
+    weakRiverRaises: 0,
+    firstHandBusts: 0,
+    firstHandBustDetail: [],
+    neuralBusts: 0,
+    postflopRaiseThenFoldHands: 0,
+    raiseThenFoldHands: 0
+  }
+  const onDecision = (context, action) => {
+    if (context.actorIndex >= neuralSeats) {
+      return
+    }
+    const toCall = context.currentBet - (context.actor.currentBet || 0)
+    if (context.board.length >= 3 && toCall === 0 && context.currentBet === 0 && isClosingAction(context)) {
+      if (holdsNuts(context)) {
+        sanity.nutSpots++
+        sanity.nutSpotsByStreet[context.street]++
+        if (action !== 'raise') {
+          sanity.nutPassiveChecks++
+          sanity.nutPassiveByStreet[context.street]++
+        }
+      }
+    }
+    if (action === 'fold' && holdsNuts(context)) {
+      sanity.nutFolds++
+    }
+    if (action === 'raise' && context.board.length === 5) {
+      sanity.riverRaiseSpots++
+      if (!holdsNuts(context) && riverStrength(context) < 0.6) {
+        sanity.weakRiverRaises++
+      }
+    }
+  }
   let violations = 0
   let handCount = 0
   const neuralNets = []
@@ -105,13 +184,15 @@ async function main() {
   const neuralActions = { fold: 0, call: 0, raise: 0 }
   const randomActions = { fold: 0, call: 0, raise: 0 }
   const startedAt = Date.now()
+  let prevChips = new Array(playerCount).fill(startChips)
 
   for (let handIndex = 0; handIndex < hands; handIndex++) {
     try {
       const record = playHand(table, {
         startChips,
         dealerIndex: handIndex % playerCount,
-        decisionFn: decide
+        decisionFn: decide,
+        onDecision
       })
       handCount++
       let neuralNet = 0
@@ -129,6 +210,33 @@ async function main() {
       })
       neuralNets.push(neuralNet)
       randomNets.push(randomNet)
+      for (let seat = 0; seat < neuralSeats; seat++) {
+        if (record.chipsAfter[seat] === 0 && prevChips[seat] > 0) {
+          sanity.neuralBusts++
+          const seatActions = record.actions
+            .filter(a => a.seat === seat)
+            .map(a => `${a.street}:${a.action}`)
+          if (handIndex === 0) {
+            sanity.firstHandBusts++
+            sanity.firstHandBustDetail.push({ seat, pot: record.potTotal, actions: seatActions })
+          }
+        }
+      }
+      for (let seat = 0; seat < neuralSeats; seat++) {
+        const idx = record.actions.reduce((acc, a, i) => {
+          if (a.seat !== seat) return acc
+          if (a.action === 'raise') acc.raises.push({ i, street: a.street })
+          if (a.action === 'fold') acc.fold = i
+          return acc
+        }, { raises: [], fold: -1 })
+        if (idx.fold >= 0 && idx.raises.some(r => r.i < idx.fold)) {
+          sanity.raiseThenFoldHands++
+          if (idx.raises.some(r => r.i < idx.fold && r.street !== 'preflop')) {
+            sanity.postflopRaiseThenFoldHands++
+          }
+        }
+      }
+      prevChips = record.chipsAfter
       const chipSum = record.chipsAfter.reduce((sum, c) => sum + c, 0)
       if (record.endStep !== 'end' || chipSum !== startChips * playerCount) {
         violations++
@@ -159,6 +267,7 @@ async function main() {
     neuralSeats,
     allowRaise,
     margin,
+    decisionEv,
     fastForwardMaxDiff: maxDiff,
     neuralNetPerHandBB: avg(neuralNets) / bb,
     randomNetPerHandBB: avg(randomNets) / bb,
@@ -167,6 +276,7 @@ async function main() {
     edgeStdErrorBB: se / bb,
     neuralActions,
     randomActions,
+    sanity,
     invariantViolations: violations,
     failureCount: failures.length,
     failures: failures.slice(0, 3),

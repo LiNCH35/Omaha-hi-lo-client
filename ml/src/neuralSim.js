@@ -56,7 +56,7 @@ async function main() {
 
   const decide = context => {
     const features = extractFeatures(context)
-    const normalized = features.map((v, i) => (v - mean[i]) / std[i])
+    const normalized = features.slice(0, mean.length).map((v, i) => (v - mean[i]) / std[i])
     const input = tf.tensor2d([normalized])
     const equityValues = Array.from(equityModel.predict(input).dataSync())
     const evInput = tf.tensor2d([normalized.concat(equityValues)])

@@ -20,7 +20,8 @@ export function monteCarloEquity({ hole, board, opponents, lowRules = true, sims
   }
 
   const needsBoard = 5 - board.length
-  const nDeal = needsBoard + oppCount * 4
+  const cardsPerHand = hole.length
+  const nDeal = needsBoard + oppCount * cardsPerHand
   if (pool.length < nDeal) {
     throw new Error(`Not enough unseen cards: pool=${pool.length} need=${nDeal}`)
   }
@@ -49,8 +50,8 @@ export function monteCarloEquity({ hole, board, opponents, lowRules = true, sims
 
     const results = new Array(oppCount)
     for (let o = 0; o < oppCount; o++) {
-      const base = needsBoard + o * 4
-      const oppHole = [pool[base], pool[base + 1], pool[base + 2], pool[base + 3]]
+      const base = needsBoard + o * cardsPerHand
+      const oppHole = pool.slice(base, base + cardsPerHand)
       const result = evaluateOmaha(oppHole, fullBoard)
       results[o] = result
       if (result.high > bestHigh) {
@@ -77,7 +78,7 @@ export function monteCarloEquity({ hole, board, opponents, lowRules = true, sims
 
     const hiShare = hero.high === bestHigh ? 1 / (1 + hiTies) : 0
     const loShare = lowRules && hero.low > 0 && bestLow !== Infinity && hero.low === bestLow ? 1 / (1 + loTies) : 0
-    const totalShare = anyLow ? hiShare + loShare : Math.min(1, hiShare * 2)
+    const totalShare = anyLow ? (hiShare + loShare) / 2 : hiShare
 
     hiSum += hiShare
     loSum += loShare
@@ -118,7 +119,8 @@ export function mcEquityCurve({ hole, board, opponents, lowRules = true, sims = 
   }
 
   const needsBoard = 5 - board.length
-  const nDeal = needsBoard + oppCount * 4
+  const cardsPerHand = hole.length
+  const nDeal = needsBoard + oppCount * cardsPerHand
   if (pool.length < nDeal) {
     throw new Error(`Not enough unseen cards: pool=${pool.length} need=${nDeal}`)
   }
@@ -131,7 +133,7 @@ export function mcEquityCurve({ hole, board, opponents, lowRules = true, sims = 
   let loseCount = 0
 
   const oppResults = new Array(oppCount)
-  const oppHole = new Array(4)
+  const oppHole = new Array(cardsPerHand)
 
   for (let s = 0; s < sims; s++) {
     for (let i = 0; i < nDeal; i++) {
@@ -143,12 +145,12 @@ export function mcEquityCurve({ hole, board, opponents, lowRules = true, sims = 
 
     if (oppFilter) {
       for (let o = 0; o < oppCount; o++) {
-        const base = needsBoard + o * 4
+        const base = needsBoard + o * cardsPerHand
         for (let t = 0; t < maxFilterTries; t++) {
-          if (oppFilter([pool[base], pool[base + 1], pool[base + 2], pool[base + 3]])) {
+          if (oppFilter(pool.slice(base, base + cardsPerHand))) {
             break
           }
-          for (let j = 0; j < 4; j++) {
+          for (let j = 0; j < cardsPerHand; j++) {
             const k = nDeal + Math.floor(Math.random() * (pool.length - nDeal))
             const tmp = pool[base + j]
             pool[base + j] = pool[k]
@@ -162,11 +164,10 @@ export function mcEquityCurve({ hole, board, opponents, lowRules = true, sims = 
     const hero = evaluateOmaha(hole, fullBoard)
 
     for (let o = 0; o < oppCount; o++) {
-      const base = needsBoard + o * 4
-      oppHole[0] = pool[base]
-      oppHole[1] = pool[base + 1]
-      oppHole[2] = pool[base + 2]
-      oppHole[3] = pool[base + 3]
+      const base = needsBoard + o * cardsPerHand
+      for (let c = 0; c < cardsPerHand; c++) {
+        oppHole[c] = pool[base + c]
+      }
       oppResults[o] = evaluateOmaha(oppHole, fullBoard)
     }
 
@@ -199,7 +200,7 @@ export function mcEquityCurve({ hole, board, opponents, lowRules = true, sims = 
       }
       const hiShare = hero.high === bestHigh ? 1 / (1 + hiTies) : 0
       const loShare = lowRules && hero.low > 0 && bestLow !== Infinity && hero.low === bestLow ? 1 / (1 + loTies) : 0
-      const totalShare = anyLow ? hiShare + loShare : Math.min(1, hiShare * 2)
+      const totalShare = anyLow ? (hiShare + loShare) / 2 : hiShare
       hiSums[k - 1] += hiShare
       loSums[k - 1] += loShare
       shareSums[k - 1] += totalShare

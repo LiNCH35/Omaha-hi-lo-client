@@ -31,13 +31,36 @@ const smallBlind = Math.max(1, Math.floor(bigBlind / 2))
 const outArg = opts.out ?? `omaha${cardCount}_${playerCount}p${lowRules ? '_lo' : ''}.jsonl`
 const outPath = path.isAbsolute(outArg) ? outArg : path.resolve(process.cwd(), outArg)
 
-const config = { hands, playerCount, startChips, cardCount, lowRules, smallBlind, bigBlind }
-const table = createTable(config)
+const sessions = opts.sessions === '1'
+const sessionHands = parseInt(opts.sessionHands ?? '150', 10)
+const sesStart = parseInt(opts.sesStart ?? '0', 10)
+const endAlive = playerCount <= 2 ? 1 : 2
+const handsPerLevel = parseInt(opts.handsPerLevel ?? '15', 10)
+const BLIND_LADDER = [2, 3, 4, 5, 6, 8, 10, 15, 20, 30, 40, 50, 60, 80, 100, 150, 200, 300, 400, 500, 600, 800, 1000, 1500, 2000, 3000, 4000, 5000, 6000, 8000, 10000, 15000, 20000, 30000, 50000]
+const sessionStartBb = BLIND_LADDER.find(v => v >= startChips / 50) ?? BLIND_LADDER[BLIND_LADDER.length - 1]
+
+const config = {
+  hands,
+  playerCount,
+  startChips,
+  cardCount,
+  lowRules,
+  smallBlind: sessions ? Math.max(1, Math.floor(sessionStartBb / 2)) : smallBlind,
+  bigBlind: sessions ? sessionStartBb : bigBlind,
+  sessions,
+  sessionHands,
+  handsPerLevel
+}
+let table = createTable(config)
 
 const explore = opts.explore === '1'
 const policy = opts.policy ?? 'random'
 const raiseProb = parseFloat(opts.raiseProb ?? '0.15')
-const neuralMix = parseFloat(opts.neuralMix ?? '0.85')
+const callStation = opts.oppPolicy === 'callstation'
+const raiser = opts.oppPolicy === 'raiser'
+const neuralSeat = parseInt(opts.neuralSeat ?? '0', 10)
+const recordSeat = opts.recordSeat !== undefined ? parseInt(opts.recordSeat, 10) : -1
+const neuralMix = (callStation || raiser) ? 1 : parseFloat(opts.neuralMix ?? '0.85')
 const nutRaiseProb = parseFloat(opts.nutRaiseProb ?? '0')
 const preflopRaiseCap = parseFloat(opts.preflopRaiseCap ?? '0')
 let neuralDecide = null
@@ -81,6 +104,18 @@ function clampRaise(context, action) {
 }
 
 function decide(context) {
+  if ((callStation || raiser) && context.actorIndex !== neuralSeat) {
+    if (raiser) {
+      const maxTo = (context.actor.currentBet || 0) + context.actor.chips
+      const raiseTo = Math.min(context.currentBet + context.pot, maxTo)
+      if (raiseTo > context.currentBet) {
+        table.store.state.raiseAmount = Math.round(raiseTo)
+        return 'raise'
+      }
+    }
+    const toCallStation = context.currentBet - (context.actor.currentBet || 0)
+    return toCallStation === 0 ? 'check' : 'call'
+  }
   if (nutRaiseProb > 0 && context.board.length >= 3 && Math.random() < nutRaiseProb && holdsNuts(context)) {
     const maxTo = (context.actor.currentBet || 0) + context.actor.chips
     const candidates = [context.currentBet + context.pot, context.currentBet * 3]
@@ -118,47 +153,139 @@ const stream = fs.createWriteStream(outPath, { flags: 'w' })
 stream.write(JSON.stringify({ t: 'meta', featureNames: FEATURE_NAMES, config }) + '\n')
 
 let decisionCount = 0
+let handsSimulated = 0
+let sessionsGenerated = 0
 const failures = []
 const startedAt = Date.now()
 
-for (let handIndex = 0; handIndex < hands; handIndex++) {
-  try {
-    const record = playHand(table, {
-      startChips,
-      dealerIndex: handIndex % playerCount,
-      decisionFn: useDecisionFn ? decide : null,
-      onDecision: (context, action) => {
-        const features = extractFeatures(context)
-        decisionCount++
-        stream.write(JSON.stringify({
-          t: 'd',
-          h: handIndex,
-          s: context.street,
-          seat: context.actorIndex,
-          a: action,
-          f: features,
-          hole: context.actor.cards.map(c => c.rank + c.suit),
-          board: context.board.map(c => c.rank + c.suit),
-          pot: context.pot,
-          toCall: context.currentBet - (context.actor.currentBet || 0),
-          bb: context.bigBlind
-        }) + '\n')
-      }
-    })
-    stream.write(JSON.stringify({
-      t: 'h',
+function writeDecisionRow(handIndex, ses) {
+  return (context, action) => {
+    if (recordSeat >= 0 && context.actorIndex !== recordSeat) {
+      return
+    }
+    const features = extractFeatures(context)
+    decisionCount++
+    const row = {
+      t: 'd',
       h: handIndex,
-      board: record.board.map(c => c.rank + c.suit),
-      results: record.players.map((p, seat) => ({
-        seat,
-        net: p.net,
-        showdown: p.wentToShowdown,
-        hiWinner: p.isWinner,
-        loWinner: p.isLowWinner
-      }))
+      s: context.street,
+      seat: context.actorIndex,
+      a: action,
+      f: features,
+      hole: context.actor.cards.map(c => c.rank + c.suit),
+      board: context.board.map(c => c.rank + c.suit),
+      pot: context.pot,
+      toCall: context.currentBet - (context.actor.currentBet || 0),
+      bb: context.bigBlind
+    }
+    if (ses > 0) {
+      row.ses = ses
+    }
+    stream.write(JSON.stringify(row) + '\n')
+  }
+}
+
+function writeHandRow(record, handIndex, ses) {
+  const row = {
+    t: 'h',
+    h: handIndex,
+    board: record.board.map(c => c.rank + c.suit),
+    results: record.players.map((p, seat) => ({
+      seat,
+      net: p.net,
+      showdown: p.wentToShowdown,
+      hiWinner: p.isWinner,
+      loWinner: p.isLowWinner
+    }))
+  }
+  if (ses > 0) {
+    row.ses = ses
+  }
+  stream.write(JSON.stringify(row) + '\n')
+}
+
+if (!sessions) {
+  for (let handIndex = 0; handIndex < hands; handIndex++) {
+    try {
+      const record = playHand(table, {
+        startChips,
+        dealerIndex: handIndex % playerCount,
+        decisionFn: useDecisionFn ? decide : null,
+        onDecision: writeDecisionRow(handIndex, 0)
+      })
+      writeHandRow(record, handIndex, 0)
+      handsSimulated++
+    } catch (error) {
+      failures.push({ handIndex, error: String(error && error.message ? error.message : error) })
+    }
+  }
+} else {
+  let handIndex = 0
+  let ses = sesStart
+  while (handIndex < hands) {
+    ses++
+    sessionsGenerated++
+    let bb = sessionStartBb
+    let sb = Math.max(1, Math.floor(bb / 2))
+    let dealer = 0
+    let chips = Array.from({ length: playerCount }, () => startChips)
+    const bustOrder = []
+    table.store.setSmallBlind(sb)
+    table.store.setBigBlind(bb)
+    let hIn = 0
+    for (; hIn < sessionHands; hIn++, handIndex++) {
+      if (hIn > 0 && hIn % handsPerLevel === 0) {
+        const next = BLIND_LADDER.find(v => v > bb)
+        bb = next ?? bb * 2
+        sb = Math.max(1, Math.floor(bb / 2))
+        table.store.setSmallBlind(sb)
+        table.store.setBigBlind(bb)
+      }
+      const prevChips = chips.slice()
+      try {
+        const record = playHand(table, {
+          startChips,
+          chipsPerSeat: chips,
+          dealerIndex: dealer,
+          decisionFn: useDecisionFn ? decide : null,
+          onDecision: writeDecisionRow(handIndex, ses)
+        })
+        chips = record.chipsAfter.slice()
+        chips.forEach((c, seat) => {
+          if (c === 0 && prevChips[seat] > 0) {
+            bustOrder.push(seat)
+          }
+        })
+        writeHandRow(record, handIndex, ses)
+        handsSimulated++
+        if (chips.filter(c => c > 0).length <= endAlive) {
+          break
+        }
+        let nextDealer = (dealer + 1) % playerCount
+        while (chips[nextDealer] === 0) {
+          nextDealer = (nextDealer + 1) % playerCount
+        }
+        dealer = nextDealer
+      } catch (error) {
+        failures.push({ handIndex, ses, error: String(error && error.message ? error.message : error) })
+        table = createTable(config)
+        break
+      }
+    }
+    const alive = chips
+      .map((c, seat) => ({ seat, c }))
+      .filter(x => x.c > 0)
+      .sort((a, b) => b.c - a.c || a.seat - b.seat)
+    const ranks = new Map(alive.map((x, i) => [x.seat, i + 1]))
+    ;[...bustOrder].reverse().forEach((seat, i) => ranks.set(seat, alive.length + i + 1))
+    stream.write(JSON.stringify({
+      t: 'ses',
+      ses,
+      reason: chips.filter(c => c > 0).length <= endAlive ? 'top2' : 'cap',
+      hands: hIn,
+      bb,
+      ranks: chips.map((c, seat) => ({ seat, rank: ranks.get(seat), chips: c }))
     }) + '\n')
-  } catch (error) {
-    failures.push({ handIndex, error: String(error && error.message ? error.message : error) })
   }
 }
 
@@ -167,7 +294,9 @@ stream.end(() => {
   originalConsoleLog(JSON.stringify({
     out: outPath,
     config,
-    handsSimulated: hands - failures.length,
+    sessions,
+    sessionsGenerated: sessions ? sessionsGenerated : undefined,
+    handsSimulated,
     decisions: decisionCount,
     failureCount: failures.length,
     failures: failures.slice(0, 3),

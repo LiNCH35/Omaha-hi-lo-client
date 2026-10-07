@@ -26,6 +26,22 @@ export function makeModel(inputDim, outputDim, outputActivation) {
   return model
 }
 
+async function loadSavedModel(dir, expectedInputDim) {
+  const spec = JSON.parse(fs.readFileSync(path.join(dir, 'model.json'), 'utf8'))
+  const weights = fs.readFileSync(path.join(dir, 'weights.bin'))
+  const weightData = weights.buffer.slice(weights.byteOffset, weights.byteOffset + weights.byteLength)
+  const model = await tf.loadLayersModel(tf.io.fromMemory({
+    modelTopology: spec.modelTopology,
+    weightSpecs: spec.weightsManifest[0].weights,
+    weightData
+  }))
+  if (model.inputs[0].shape[1] !== expectedInputDim) {
+    throw new Error(`Warm start shape mismatch in ${dir}: model=${model.inputs[0].shape[1]} expected=${expectedInputDim}`)
+  }
+  model.compile({ optimizer: tf.train.adam(0.001), loss: 'meanSquaredError' })
+  return model
+}
+
 export async function trainModel(model, xs, ys, valXs, valYs, name, epochs, batchSize) {
   const xT = tf.tensor2d(xs)
   const yT = tf.tensor2d(ys)
@@ -53,7 +69,7 @@ export async function trainModel(model, xs, ys, valXs, valYs, name, epochs, batc
   }
 }
 
-export async function trainEquityEv({ train, val, featureNames, featureSet, eqNames, evNames, epochs, batchSize, modelsDir, source }) {
+export async function trainEquityEv({ train, val, featureNames, featureSet, eqNames, evNames, epochs, batchSize, modelsDir, source, evUnits, decisionEv, warmStart }) {
   const dim = featureNames.length
   if (train[0].x.length !== dim || val[0].x.length !== dim) {
     throw new Error(`Feature dim mismatch: expected ${dim}, got ${train[0].x.length}/${val[0].x.length}`)
@@ -92,15 +108,15 @@ export async function trainEquityEv({ train, val, featureNames, featureSet, eqNa
   const trainX2 = trainX.map((x, i) => x.concat(trainEq[i]))
   const valX2 = valX.map((x, i) => x.concat(valEq[i]))
 
-  process.stdout.write(`[train] equity dim=${dim} train=${nTrain} val=${val.length}\n`)
-  const equityModel = makeModel(dim, eqDim, 'sigmoid')
+  process.stdout.write(`[train] equity dim=${dim} train=${nTrain} val=${val.length}${warmStart ? ' warmStart=' + warmStart : ''}\n`)
+  const equityModel = warmStart ? await loadSavedModel(path.join(warmStart, 'equity'), dim) : makeModel(dim, eqDim, 'sigmoid')
   const equityMetrics = await trainModel(equityModel, trainX, trainEq, valX, valEq, 'equity', epochs, batchSize)
   await equityModel.save(makeSaveHandler(path.join(modelsDir, 'equity')))
   equityModel.dispose()
   process.stdout.write(`[train] equity done: valMae=${equityMetrics.valMae.map(v => v.toFixed(4)).join(',')}\n`)
 
   process.stdout.write(`[train] ev dim=${dim + eqDim}\n`)
-  const evModel = makeModel(dim + eqDim, evDim, 'linear')
+  const evModel = warmStart ? await loadSavedModel(path.join(warmStart, 'ev'), dim + eqDim) : makeModel(dim + eqDim, evDim, 'linear')
   const evMetrics = await trainModel(evModel, trainX2, trainEv, valX2, valEv, 'ev', epochs, batchSize)
   await evModel.save(makeSaveHandler(path.join(modelsDir, 'ev')))
   evModel.dispose()
@@ -118,6 +134,8 @@ export async function trainEquityEv({ train, val, featureNames, featureSet, eqNa
     eqNames,
     evNames,
     norm: { mean, std },
+    ...(evUnits ? { evUnits } : {}),
+    ...(decisionEv ? { decisionEv } : {}),
     metrics: { equity: equityMetrics, ev: evMetrics }
   }
   fs.mkdirSync(modelsDir, { recursive: true })

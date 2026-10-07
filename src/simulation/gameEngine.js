@@ -17,6 +17,45 @@ export class GameEngine {
     this.store = store
     this.timers = []
     this.decisionProvider = null
+    this.handActions = []
+    this.preflopStats = new Map()
+  }
+
+  trackAction(playerIndex, action) {
+    const street = this.store.getStep()
+    const player = this.store.getPlayers()[playerIndex]
+    this.handActions.push({
+      street,
+      seat: playerIndex,
+      action,
+      allIn: player ? player.chips === 0 : false
+    })
+    if (street === 'preflop' && (action === 'fold' || action === 'call' || action === 'raise')) {
+      let stats = this.preflopStats.get(playerIndex)
+      if (!stats) {
+        stats = { actions: 0, raises: 0, jams: 0 }
+        this.preflopStats.set(playerIndex, stats)
+      }
+      stats.actions++
+      if (action === 'raise') {
+        stats.raises++
+        if (player && player.chips === 0) {
+          stats.jams++
+        }
+      }
+    }
+  }
+
+  getOppHistory(actorIndex) {
+    const agg = { actions: 0, raises: 0, jams: 0 }
+    for (const [seat, stats] of this.preflopStats) {
+      if (seat !== actorIndex) {
+        agg.actions += stats.actions
+        agg.raises += stats.raises
+        agg.jams += stats.jams
+      }
+    }
+    return agg
   }
 
   /**
@@ -71,6 +110,7 @@ export class GameEngine {
   startHand() {
     debugLog('game:start')
     this.clearPendingTimers('start')
+    this.handActions = []
     
     this.store.shuffleDeck()
     this.store.setShowHiCards(false)
@@ -161,6 +201,7 @@ export class GameEngine {
     
     this.store.setCurrentBet(0)
     this.store.setPlayersActedCount(0)
+    this.store.setRaiseAmount(this.store.getSmallBlind())
     
     if (step === 'preflop') {
       // Blinds go to the next active players after the dealer (folded/bankrupt are not counted)
@@ -226,6 +267,7 @@ export class GameEngine {
       // First player to act - next active player after the big blind
       const firstToActIndex = findNextActive(bigBlindIndex)
       this.store.setCurrentPlayerIndex(firstToActIndex)
+      this.store.setRaiseAmount(this.store.getCurrentBet() + this.store.getSmallBlind())
       successLog(`Банк после блайндов: $${this.getFullPot()}`)
     } else {
       // On later streets, first player is next active after dealer
@@ -260,6 +302,14 @@ export class GameEngine {
    * Apply player action
    */
   applyAction(playerIndex, action) {
+    const result = this.applyActionInner(playerIndex, action)
+    if (result !== false) {
+      this.trackAction(playerIndex, action)
+    }
+    return result
+  }
+
+  applyActionInner(playerIndex, action) {
     const players = this.store.getPlayers()
     const player = players[playerIndex]
     const currentBet = this.store.getCurrentBet()
@@ -416,9 +466,10 @@ export class GameEngine {
     }
     
     let action = null
+    const prevRaiseAmount = this.store.getRaiseAmount()
     if (this.decisionProvider) {
       try {
-        action = this.decisionProvider(this.store, currentPlayerIndex)
+        action = this.decisionProvider(this.store, currentPlayerIndex, this)
       } catch (error) {
         warningLog('Нейро-решение недоступно, используется обычный бот', { player: player.name, error: String(error) })
         action = null
@@ -427,8 +478,9 @@ export class GameEngine {
     if (!action) {
       action = getBotDecision(player, this.store.getCurrentBet())
     }
-    if (action === 'raise' && this.store.getRaiseAmount() <= this.store.getCurrentBet()) {
-      const raiseTo = Math.min(this.store.getCurrentBet() + this.getFullPot(), player.currentBet + player.chips)
+    if (action === 'raise' && this.store.getRaiseAmount() === prevRaiseAmount) {
+      const cap = this.store.getStep() === 'preflop' ? this.store.getBigBlind() * 3 : Infinity
+      const raiseTo = Math.min(this.store.getCurrentBet() + this.getFullPot(), player.currentBet + player.chips, cap)
       if (raiseTo > this.store.getCurrentBet()) {
         this.store.setRaiseAmount(Math.round(raiseTo))
       } else {

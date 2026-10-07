@@ -32,7 +32,10 @@ await esbuild.build({
     path.join(mlRoot, 'src', 'train.js'),
     path.join(mlRoot, 'src', 'neuralSim.js'),
     path.join(mlRoot, 'src', 'benchmark.js'),
-    path.join(mlRoot, 'src', 'experiments.js')
+    path.join(mlRoot, 'src', 'experiments.js'),
+    path.join(mlRoot, 'src', 'tournamentCheck.js'),
+    path.join(mlRoot, 'src', 'tournamentReview.js'),
+    path.join(mlRoot, 'src', 'scenarioCheck.js')
   ],
   bundle: true,
   platform: 'node',

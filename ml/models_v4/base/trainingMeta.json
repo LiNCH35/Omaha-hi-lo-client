@@ -1,0 +1,125 @@
+{
+  "data": "E:\\php\\Omaha-hi-lo-client\\ml\\data\\omaha4_8p_lo_v4_labeled.jsonl",
+  "records": 17668,
+  "train": 15902,
+  "val": 1766,
+  "epochs": 20,
+  "batchSize": 256,
+  "featureSet": "base",
+  "featureNames": [
+    "street",
+    "players_remaining",
+    "position",
+    "pot_bb",
+    "stack_bb",
+    "spr",
+    "to_call_bb",
+    "pot_odds",
+    "preflop_score",
+    "high_strength",
+    "low_strength",
+    "nut_high",
+    "nut_low",
+    "high_outs",
+    "low_outs",
+    "clean_high_outs",
+    "clean_low_outs",
+    "paired_board",
+    "flush_possible",
+    "straight_possible",
+    "low_possible",
+    "board_low_cards",
+    "board_high_cards",
+    "actor_has_acted"
+  ],
+  "eqNames": [
+    "hi",
+    "lo",
+    "scoop",
+    "split",
+    "lose",
+    "share"
+  ],
+  "evNames": [
+    "ev_fold",
+    "ev_call",
+    "ev_raise"
+  ],
+  "norm": {
+    "mean": [
+      0,
+      7.732172053829707,
+      0.45267104766696015,
+      131.798987548736,
+      289.1978681926802,
+      6.801035749799219,
+      66.42265123883789,
+      0.2788060080997189,
+      0.38669595648346,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "std": [
+      1,
+      0.5310341626775781,
+      0.2880014121016668,
+      86.51930494340787,
+      41.017742554091434,
+      8.538090402376495,
+      42.8068019902276,
+      0.11939487264943889,
+      0.14318286312761808,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+    ]
+  },
+  "metrics": {
+    "equity": {
+      "finalLoss": 0.001267160288989544,
+      "finalValLoss": 0.0012366138398647308,
+      "valMae": [
+        0.024482663720846176,
+        0.0248256865888834,
+        0.02389107644557953,
+        0.019559795036911964,
+        0.0309721902012825,
+        0.027071794494986534
+      ]
+    },
+    "ev": {
+      "finalLoss": 2247.86767578125,
+      "finalValLoss": 2178.132080078125,
+      "valMae": [
+        0.18617624044418335,
+        40.915550231933594,
+        32.21607971191406
+      ]
+    }
+  }
+}

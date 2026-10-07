@@ -9,7 +9,7 @@ export function createTable(config = {}) {
   return { store, engine, config }
 }
 
-export function playHand(table, { decisionFn, onDecision, startChips = 1000, dealerIndex = 0 } = {}) {
+export function playHand(table, { decisionFn, onDecision, startChips = 1000, dealerIndex = 0, chipsPerSeat = null } = {}) {
   const { store, engine } = table
   const players = store.getPlayers()
   const actions = []
@@ -36,7 +36,7 @@ export function playHand(table, { decisionFn, onDecision, startChips = 1000, dea
   store.setCurrentPlayerIndex(0)
   store.setPlayersActedCount(0)
   store.setDealerIndex(dealerIndex)
-  players.forEach(p => resetPlayerState(p, startChips))
+  players.forEach((p, seat) => resetPlayerState(p, chipsPerSeat ? chipsPerSeat[seat] : startChips))
 
   engine.queue.length = 0
   engine.decisionFn = decisionFn || null
